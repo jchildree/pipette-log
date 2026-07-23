@@ -89,6 +89,14 @@ test('user setup + reference data + full entry lifecycle', async () => {
     assert.equal(history.body.length, 2, 'expected original + one correction');
     assert.equal(history.body[0].id, entryId);
     assert.equal(history.body[1].corrects_entry_id, entryId);
+
+    // audit list: shows only the current-state (leaf) row, joined to readable names
+    const list = await api(`/entries?pipette_id=${pipetteId}&balance_id=${balanceId}`);
+    assert.ok(!list.body.some((e) => e.id === entryId), 'original (superseded) row should not appear');
+    const correctionRow = list.body.find((e) => e.corrects_entry_id === entryId);
+    assert.ok(correctionRow, 'correction row should appear in the list');
+    assert.equal(correctionRow.corrected, 1);
+    assert.equal(correctionRow.signed_by_username, username);
 });
 
 test('reference data creation requires valid PIN', async () => {
@@ -97,23 +105,28 @@ test('reference data creation requires valid PIN', async () => {
 
     const unauthorized = await api('/balances', {
         method: 'POST',
-        body: JSON.stringify({ username: refUser, pin: 'wrong', name: 'Should Not Exist' }),
+        body: JSON.stringify({ username: refUser, pin: 'wrong', equipment_id: `BAL-ITEST-${Date.now()}` }),
     });
     assert.equal(unauthorized.status, 401);
 
     const newBalance = await api('/balances', {
         method: 'POST',
-        body: JSON.stringify({ username: refUser, pin: '222222', name: `Balance ${Date.now()}`, location: 'Bench 2' }),
+        body: JSON.stringify({ username: refUser, pin: '222222', equipment_id: `BAL-ITEST-${Date.now()}` }),
     });
     assert.equal(newBalance.status, 201);
     assert.ok(newBalance.body.id);
+    assert.equal(newBalance.body.equipment_type, 'Balance');
 
     const newPipette = await api('/pipettes', {
         method: 'POST',
-        body: JSON.stringify({ username: refUser, pin: '222222', pipette_number: `P-${Date.now()}`, min_range: 1, max_range: 10 }),
+        body: JSON.stringify({
+            username: refUser, pin: '222222', equipment_id: `PI-ITEST-${Date.now()}`,
+            category: 'single channel', pipette_range: '10-100 uL', low_ul: 10, mid_ul: 50, high_ul: 100,
+        }),
     });
     assert.equal(newPipette.status, 201);
     assert.ok(newPipette.body.id);
+    assert.equal(newPipette.body.equipment_type, 'Pipette');
 });
 
 test('PIN lockout after repeated failures', async () => {

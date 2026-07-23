@@ -45,6 +45,47 @@ router.post('/entries', async (req, res) => {
     res.status(201).json(result.recordset[0]);
 });
 
+// Audit/review list: current-state entries only (the latest row in each correction
+// chain -- ADR-005), with pipette/balance/technician resolved to readable names.
+// A row where corrects_entry_id is set is itself a correction, so `corrected: true`
+// flags that history exists behind it (fetch via /entries/:id/history).
+router.get('/entries', async (req, res) => {
+    const { pipette_id, balance_id, username, verification_type, pass_fail, from, to } = req.query;
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('pipetteId', sql.Int, pipette_id ? Number(pipette_id) : null)
+        .input('balanceId', sql.Int, balance_id ? Number(balance_id) : null)
+        .input('username', sql.NVarChar, username ?? null)
+        .input('verificationType', sql.NVarChar, verification_type ?? null)
+        .input('passFail', sql.Char(1), pass_fail ?? null)
+        .input('from', sql.DateTime2, from ?? null)
+        .input('to', sql.DateTime2, to ?? null)
+        .query(`
+            SELECT
+                e.*,
+                p.equipment_id AS pipette_equipment_id,
+                b.equipment_id AS balance_equipment_id,
+                u.username AS signed_by_username,
+                CASE WHEN e.corrects_entry_id IS NOT NULL THEN 1 ELSE 0 END AS corrected
+            FROM entries e
+            JOIN equipment p ON p.id = e.pipette_id
+            JOIN equipment b ON b.id = e.balance_id
+            LEFT JOIN users u ON u.id = e.signed_by_user_id
+            WHERE NOT EXISTS (SELECT 1 FROM entries c WHERE c.corrects_entry_id = e.id)
+                AND (@pipetteId IS NULL OR e.pipette_id = @pipetteId)
+                AND (@balanceId IS NULL OR e.balance_id = @balanceId)
+                AND (@username IS NULL OR u.username = @username)
+                AND (@verificationType IS NULL OR e.verification_type = @verificationType)
+                AND (@passFail IS NULL OR e.pass_fail = @passFail)
+                AND (@from IS NULL OR e.signed_at >= @from)
+                AND (@to IS NULL OR e.signed_at <= @to)
+            ORDER BY e.signed_at DESC
+        `);
+
+    res.json(result.recordset);
+});
+
 router.post('/entries/:id/correct', async (req, res) => {
     const { id } = req.params;
     const { username, pin, pipette_id, balance_id, verification_type, volume_ul, mass_mg, note, pass_fail } = req.body;

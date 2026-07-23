@@ -1,7 +1,7 @@
 CREATE TABLE entries (
     id                  INT IDENTITY(1,1) PRIMARY KEY,
-    pipette_id          INT           NOT NULL REFERENCES pipettes(id),
-    balance_id          INT           NOT NULL REFERENCES balances(id),
+    pipette_id          INT           NOT NULL REFERENCES equipment(id), -- app layer enforces equipment_type = 'Pipette'
+    balance_id          INT           NOT NULL REFERENCES equipment(id), -- app layer enforces equipment_type = 'Balance'
     verification_type   NVARCHAR(30)  NOT NULL
                          CHECK (verification_type IN ('tolerance_3pct', 'manufacturer_spec', 'after_external_cal')),
     volume_ul           DECIMAL(10,3) NOT NULL,

@@ -6,13 +6,13 @@ const router = express.Router();
 
 router.get('/balances', async (req, res) => {
     const pool = await getPool();
-    const result = await pool.request().query('SELECT * FROM balances ORDER BY name');
+    const result = await pool.request().query("SELECT * FROM equipment WHERE equipment_type = 'Balance' ORDER BY equipment_id");
     res.json(result.recordset);
 });
 
 router.get('/pipettes', async (req, res) => {
     const pool = await getPool();
-    const result = await pool.request().query('SELECT * FROM pipettes ORDER BY pipette_number');
+    const result = await pool.request().query("SELECT * FROM equipment WHERE equipment_type = 'Pipette' ORDER BY equipment_id");
     res.json(result.recordset);
 });
 
@@ -20,33 +20,39 @@ router.get('/pipettes', async (req, res) => {
 // specified how it's entered -- reusing the same username+PIN auth as /entries rather
 // than leaving these writes unauthenticated.
 router.post('/balances', async (req, res) => {
-    const { username, pin, name, location } = req.body;
+    const { username, pin, equipment_id, calibration_due_date } = req.body;
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
-    if (!name) return res.status(400).json({ error: 'name is required' });
+    if (!equipment_id) return res.status(400).json({ error: 'equipment_id is required' });
 
     const pool = await getPool();
     const result = await pool.request()
-        .input('name', sql.NVarChar, name)
-        .input('location', sql.NVarChar, location ?? null)
-        .query('INSERT INTO balances (name, location) OUTPUT INSERTED.* VALUES (@name, @location)');
+        .input('equipmentId', sql.NVarChar, equipment_id)
+        .input('calibrationDueDate', sql.Date, calibration_due_date ?? null)
+        .query("INSERT INTO equipment (equipment_type, equipment_id, calibration_due_date) OUTPUT INSERTED.* VALUES ('Balance', @equipmentId, @calibrationDueDate)");
     res.status(201).json(result.recordset[0]);
 });
 
 router.post('/pipettes', async (req, res) => {
-    const { username, pin, pipette_number, min_range, max_range } = req.body;
+    const { username, pin, equipment_id, category, pipette_range, calibration_due_date, low_ul, mid_ul, high_ul } = req.body;
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
-    if (!pipette_number || min_range == null || max_range == null) {
-        return res.status(400).json({ error: 'pipette_number, min_range, and max_range are required' });
-    }
+    if (!equipment_id) return res.status(400).json({ error: 'equipment_id is required' });
 
     const pool = await getPool();
     const result = await pool.request()
-        .input('pipetteNumber', sql.NVarChar, pipette_number)
-        .input('minRange', sql.Decimal(10, 2), min_range)
-        .input('maxRange', sql.Decimal(10, 2), max_range)
-        .query('INSERT INTO pipettes (pipette_number, min_range, max_range) OUTPUT INSERTED.* VALUES (@pipetteNumber, @minRange, @maxRange)');
+        .input('equipmentId', sql.NVarChar, equipment_id)
+        .input('category', sql.NVarChar, category ?? null)
+        .input('pipetteRange', sql.NVarChar, pipette_range ?? null)
+        .input('calibrationDueDate', sql.Date, calibration_due_date ?? null)
+        .input('lowUl', sql.Decimal(10, 3), low_ul ?? null)
+        .input('midUl', sql.Decimal(10, 3), mid_ul ?? null)
+        .input('highUl', sql.Decimal(10, 3), high_ul ?? null)
+        .query(`
+            INSERT INTO equipment (equipment_type, equipment_id, category, pipette_range, calibration_due_date, low_ul, mid_ul, high_ul)
+            OUTPUT INSERTED.*
+            VALUES ('Pipette', @equipmentId, @category, @pipetteRange, @calibrationDueDate, @lowUl, @midUl, @highUl)
+        `);
     res.status(201).json(result.recordset[0]);
 });
 
