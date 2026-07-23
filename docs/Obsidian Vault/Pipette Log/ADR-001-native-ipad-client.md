@@ -1,7 +1,7 @@
 # ADR-001: Native iPad Client
 
 **Project:** Pipette Log
-Status: ACCEPTED
+Status: DEPRECATED (superseded by ADR-008 -- dev environment has no Mac/Xcode)
 Date: 2026-07-22
 Authors: Joseph Childree
 Affected Layers: Client
