@@ -91,6 +91,31 @@ test('user setup + reference data + full entry lifecycle', async () => {
     assert.equal(history.body[1].corrects_entry_id, entryId);
 });
 
+test('reference data creation requires valid PIN', async () => {
+    const refUser = `itest_ref_${Date.now()}`;
+    await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: refUser, pin: '222222' }) });
+
+    const unauthorized = await api('/balances', {
+        method: 'POST',
+        body: JSON.stringify({ username: refUser, pin: 'wrong', name: 'Should Not Exist' }),
+    });
+    assert.equal(unauthorized.status, 401);
+
+    const newBalance = await api('/balances', {
+        method: 'POST',
+        body: JSON.stringify({ username: refUser, pin: '222222', name: `Balance ${Date.now()}`, location: 'Bench 2' }),
+    });
+    assert.equal(newBalance.status, 201);
+    assert.ok(newBalance.body.id);
+
+    const newPipette = await api('/pipettes', {
+        method: 'POST',
+        body: JSON.stringify({ username: refUser, pin: '222222', pipette_number: `P-${Date.now()}`, min_range: 1, max_range: 10 }),
+    });
+    assert.equal(newPipette.status, 201);
+    assert.ok(newPipette.body.id);
+});
+
 test('PIN lockout after repeated failures', async () => {
     const lockUser = `itest_lock_${Date.now()}`;
     await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: lockUser, pin: '111111' }) });
