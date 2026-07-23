@@ -10,5 +10,6 @@
 | ADR-006 | Verification Type Model and Pass/Fail Calculation | ACCEPTED | Backend · Database · Client | 2026-07-22 |
 | ADR-007 | Standalone Phase 1 Backend, Nexus-Shaped for Later Migration | ACCEPTED | Backend · Database | 2026-07-22 |
 | ADR-008 | React Native / Expo Client (Supersedes ADR-001) | ACCEPTED | Client | 2026-07-23 |
+| ADR-009 | Three-Point (Low/Mid/High) Verification Per Entry | ACCEPTED | Backend · Database · Client | 2026-07-23 |
 
 **Status values:** PROPOSED | ACCEPTED | DEPRECATED
