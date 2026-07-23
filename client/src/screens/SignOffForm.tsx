@@ -6,13 +6,31 @@ import { fetchBalances, fetchPipettes, fetchUsers, submitEntry } from '../api';
 import { getCachedBalances, getCachedPipettes, getCachedUsers, setCachedBalances, setCachedPipettes, setCachedUsers } from '../storage/referenceCache';
 import { enqueueEntry } from '../storage/queue';
 import { isOnline } from '../network';
-import { Balance, EntryPayload, NOTE_REQUIRED_TYPES, Pipette, User, VerificationType } from '../types';
+import { Balance, EntryPayload, NOTE_REQUIRED_TYPES, Pipette, PointKey, User, VerificationType } from '../types';
 
 const VERIFICATION_TYPES: { value: VerificationType; label: string }[] = [
     { value: 'tolerance_3pct', label: '±3% Tolerance' },
     { value: 'manufacturer_spec', label: 'Manufacturer Specifications' },
     { value: 'after_external_cal', label: 'After External Calibration' },
 ];
+
+const POINTS: { key: PointKey; label: string }[] = [
+    { key: 'low', label: 'Low' },
+    { key: 'mid', label: 'Mid' },
+    { key: 'high', label: 'High' },
+];
+
+interface PointRow {
+    volumeUl: string;
+    massMg: string;
+    passFail: 'Y' | 'N';
+}
+
+const EMPTY_ROW: PointRow = { volumeUl: '', massMg: '', passFail: 'Y' };
+
+function emptyRows(): Record<PointKey, PointRow> {
+    return { low: { ...EMPTY_ROW }, mid: { ...EMPTY_ROW }, high: { ...EMPTY_ROW } };
+}
 
 export default function SignOffForm() {
     const [users, setUsers] = useState<User[]>([]);
@@ -22,10 +40,8 @@ export default function SignOffForm() {
     const [pipetteId, setPipetteId] = useState<number | null>(null);
     const [balanceId, setBalanceId] = useState<number | null>(null);
     const [verificationType, setVerificationType] = useState<VerificationType>('tolerance_3pct');
-    const [volumeUl, setVolumeUl] = useState('');
-    const [massMg, setMassMg] = useState('');
+    const [rows, setRows] = useState<Record<PointKey, PointRow>>(emptyRows());
     const [note, setNote] = useState('');
-    const [passFail, setPassFail] = useState<'Y' | 'N'>('Y');
 
     const [signOffVisible, setSignOffVisible] = useState(false);
     const [username, setUsername] = useState('');
@@ -63,11 +79,23 @@ export default function SignOffForm() {
     const selectedPipette = pipettes.find((p) => p.id === pipetteId) ?? null;
     const selectedBalance = balances.find((b) => b.id === balanceId) ?? null;
 
+    // Pre-fill each point's Volume from the pipette's reference low/mid/high (editable, per ADR-009).
+    useEffect(() => {
+        if (!selectedPipette) return;
+        setRows((prev) => ({
+            low: { ...prev.low, volumeUl: prev.low.volumeUl || (selectedPipette.low_ul != null ? String(selectedPipette.low_ul) : '') },
+            mid: { ...prev.mid, volumeUl: prev.mid.volumeUl || (selectedPipette.mid_ul != null ? String(selectedPipette.mid_ul) : '') },
+            high: { ...prev.high, volumeUl: prev.high.volumeUl || (selectedPipette.high_ul != null ? String(selectedPipette.high_ul) : '') },
+        }));
+    }, [selectedPipette]);
+
+    function updateRow(key: PointKey, field: keyof PointRow, value: string) {
+        setRows((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+    }
+
     function resetForm() {
-        setVolumeUl('');
-        setMassMg('');
+        setRows(emptyRows());
         setNote('');
-        setPassFail('Y');
         setUsername('');
         setPin('');
     }
@@ -75,8 +103,9 @@ export default function SignOffForm() {
     function openSignOff() {
         setStatus(null);
 
-        if (!pipetteId || !balanceId || !volumeUl || !massMg) {
-            setStatus('Fill in all required fields.');
+        const allFilled = POINTS.every(({ key }) => rows[key].volumeUl && rows[key].massMg);
+        if (!pipetteId || !balanceId || !allFilled) {
+            setStatus('Fill in all required fields (Low/Mid/High Volume and Mass).');
             return;
         }
         if (noteRequired && !note) {
@@ -100,10 +129,12 @@ export default function SignOffForm() {
             pipette_id: pipetteId!,
             balance_id: balanceId!,
             verification_type: verificationType,
-            volume_ul: Number(volumeUl),
-            mass_mg: Number(massMg),
+            points: {
+                low: { volume_ul: Number(rows.low.volumeUl), mass_mg: Number(rows.low.massMg), pass_fail: passFailEditable ? rows.low.passFail : undefined },
+                mid: { volume_ul: Number(rows.mid.volumeUl), mass_mg: Number(rows.mid.massMg), pass_fail: passFailEditable ? rows.mid.passFail : undefined },
+                high: { volume_ul: Number(rows.high.volumeUl), mass_mg: Number(rows.high.massMg), pass_fail: passFailEditable ? rows.high.passFail : undefined },
+            },
             note: note || undefined,
-            pass_fail: passFailEditable ? passFail : undefined,
         };
 
         const state = await NetInfo.fetch();
@@ -173,24 +204,38 @@ export default function SignOffForm() {
 
             <View style={styles.table}>
                 <View style={styles.tableHeaderRow}>
+                    <Text style={[styles.tableHeaderCell, styles.tablePointCell]}> </Text>
                     <Text style={styles.tableHeaderCell}>Volume (µL)</Text>
                     <Text style={styles.tableHeaderCell}>Mass (mg)</Text>
                     <Text style={styles.tableHeaderCell}>Pass (Y/N)</Text>
                 </View>
-                <View style={styles.tableRow}>
-                    <TextInput style={styles.tableCellInput} value={volumeUl} onChangeText={setVolumeUl} keyboardType="decimal-pad" />
-                    <TextInput style={styles.tableCellInput} value={massMg} onChangeText={setMassMg} keyboardType="decimal-pad" />
-                    <View style={styles.tableCellInput}>
-                        {passFailEditable ? (
-                            <Picker selectedValue={passFail} onValueChange={setPassFail}>
-                                <Picker.Item label="Y" value="Y" />
-                                <Picker.Item label="N" value="N" />
-                            </Picker>
-                        ) : (
-                            <Text style={styles.computedNote}>auto</Text>
-                        )}
+                {POINTS.map(({ key, label }) => (
+                    <View style={styles.tableRow} key={key}>
+                        <Text style={[styles.tableRowLabel, styles.tablePointCell]}>{label}</Text>
+                        <TextInput
+                            style={styles.tableCellInput}
+                            value={rows[key].volumeUl}
+                            onChangeText={(v) => updateRow(key, 'volumeUl', v)}
+                            keyboardType="decimal-pad"
+                        />
+                        <TextInput
+                            style={styles.tableCellInput}
+                            value={rows[key].massMg}
+                            onChangeText={(v) => updateRow(key, 'massMg', v)}
+                            keyboardType="decimal-pad"
+                        />
+                        <View style={styles.tableCellInput}>
+                            {passFailEditable ? (
+                                <Picker selectedValue={rows[key].passFail} onValueChange={(v) => updateRow(key, 'passFail', v)}>
+                                    <Picker.Item label="Y" value="Y" />
+                                    <Picker.Item label="N" value="N" />
+                                </Picker>
+                            ) : (
+                                <Text style={styles.computedNote}>auto</Text>
+                            )}
+                        </View>
                     </View>
-                </View>
+                ))}
             </View>
 
             <Text style={styles.label}>Notes{noteRequired ? ' (required)' : ' (optional)'}</Text>
@@ -267,7 +312,9 @@ const styles = StyleSheet.create({
     table: { marginTop: 16, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: BRAND_BORDER },
     tableHeaderRow: { flexDirection: 'row', backgroundColor: BRAND_BLUE },
     tableHeaderCell: { flex: 1, color: '#fff', fontWeight: '700', padding: 10, textAlign: 'center' },
-    tableRow: { flexDirection: 'row', backgroundColor: '#eef7fb' },
+    tableRow: { flexDirection: 'row', backgroundColor: '#eef7fb', borderTopWidth: 1, borderTopColor: BRAND_BORDER },
+    tableRowLabel: { flex: 1, fontWeight: '600', padding: 10, textAlign: 'center', color: '#1a4d5c' },
+    tablePointCell: { flex: 0.6 },
     tableCellInput: { flex: 1, padding: 8, borderLeftWidth: 1, borderLeftColor: BRAND_BORDER, textAlign: 'center' },
 
     notesBox: {

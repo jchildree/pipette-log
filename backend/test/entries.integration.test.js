@@ -24,6 +24,15 @@ async function api(path, options) {
     return { status: res.status, body };
 }
 
+// low/mid/high all pass +/-3% tolerance at their respective volumes by default.
+function points({ low = {}, mid = {}, high = {} } = {}) {
+    return {
+        low: { volume_ul: 20, mass_mg: 20, ...low },
+        mid: { volume_ul: 100, mass_mg: 100, ...mid },
+        high: { volume_ul: 200, mass_mg: 200, ...high },
+    };
+}
+
 const username = `itest_${Date.now()}`;
 const pin = '123456';
 
@@ -42,24 +51,39 @@ test('user setup + reference data + full entry lifecycle', async () => {
     const balanceId = balances.body[0].id;
     const pipetteId = pipettes.body[0].id;
 
-    // tolerance_3pct: server computes pass_fail, 97 on volume 100 -> Y (inclusive bound)
+    // tolerance_3pct: server computes pass/fail per point (low/mid/high independently)
     const entry = await api('/entries', {
         method: 'POST',
         body: JSON.stringify({
             username, pin, pipette_id: pipetteId, balance_id: balanceId,
-            verification_type: 'tolerance_3pct', volume_ul: 100, mass_mg: 97,
+            verification_type: 'tolerance_3pct',
+            points: points({ low: { mass_mg: 19.4 } }), // 19.4 on volume 20 -> N (below 0.97*20=19.4... exactly at bound -> Y actually)
         }),
     });
     assert.equal(entry.status, 201);
     assert.ok(entry.body.signed_at);
+    assert.equal(entry.body.pass_low, 'Y'); // 19.4 == 0.97*20, inclusive bound
+    assert.equal(entry.body.pass_mid, 'Y');
+    assert.equal(entry.body.pass_high, 'Y');
     const entryId = entry.body.id;
+
+    // missing a point -> rejected
+    const missingPoint = await api('/entries', {
+        method: 'POST',
+        body: JSON.stringify({
+            username, pin, pipette_id: pipetteId, balance_id: balanceId,
+            verification_type: 'tolerance_3pct',
+            points: { low: { volume_ul: 20, mass_mg: 20 }, mid: { volume_ul: 100, mass_mg: 100 } }, // no high
+        }),
+    });
+    assert.equal(missingPoint.status, 400);
 
     // manufacturer_spec with no note -> rejected
     const rejected = await api('/entries', {
         method: 'POST',
         body: JSON.stringify({
             username, pin, pipette_id: pipetteId, balance_id: balanceId,
-            verification_type: 'manufacturer_spec', volume_ul: 100, mass_mg: 100,
+            verification_type: 'manufacturer_spec', points: points(),
         }),
     });
     assert.equal(rejected.status, 400);
@@ -69,7 +93,7 @@ test('user setup + reference data + full entry lifecycle', async () => {
         method: 'POST',
         body: JSON.stringify({
             username, pin: '000000', pipette_id: pipetteId, balance_id: balanceId,
-            verification_type: 'tolerance_3pct', volume_ul: 100, mass_mg: 100,
+            verification_type: 'tolerance_3pct', points: points(),
         }),
     });
     assert.equal(wrongPin.status, 401);
@@ -79,8 +103,8 @@ test('user setup + reference data + full entry lifecycle', async () => {
         method: 'POST',
         body: JSON.stringify({
             username, pin, pipette_id: pipetteId, balance_id: balanceId,
-            verification_type: 'tolerance_3pct', volume_ul: 100, mass_mg: 98,
-            note: 'corrected mass reading',
+            verification_type: 'tolerance_3pct', points: points({ mid: { mass_mg: 98 } }),
+            note: 'corrected mid mass reading',
         }),
     });
     assert.equal(correction.status, 201);
@@ -144,7 +168,7 @@ test('PIN lockout after repeated failures', async () => {
             method: 'POST',
             body: JSON.stringify({
                 username: lockUser, pin: '999999', pipette_id: pipetteId, balance_id: balanceId,
-                verification_type: 'tolerance_3pct', volume_ul: 100, mass_mg: 100,
+                verification_type: 'tolerance_3pct', points: points(),
             }),
         });
     }
@@ -156,7 +180,7 @@ test('PIN lockout after repeated failures', async () => {
         method: 'POST',
         body: JSON.stringify({
             username: lockUser, pin: '111111', pipette_id: pipetteId, balance_id: balanceId,
-            verification_type: 'tolerance_3pct', volume_ul: 100, mass_mg: 100,
+            verification_type: 'tolerance_3pct', points: points(),
         }),
     });
     assert.equal(stillLocked.status, 401);

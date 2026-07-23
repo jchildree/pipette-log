@@ -26,16 +26,22 @@ export interface Pipette {
     high_ul: number | null;
 }
 
+export interface MeasurementPoint {
+    volume_ul: number;
+    mass_mg: number;
+    pass_fail?: 'Y' | 'N'; // manual only, ignored for tolerance_3pct (server computes)
+}
+
+export type PointKey = 'low' | 'mid' | 'high';
+
 export interface EntryPayload {
     username: string;
     pin: string;
     pipette_id: number;
     balance_id: number;
     verification_type: VerificationType;
-    volume_ul: number;
-    mass_mg: number;
+    points: Record<PointKey, MeasurementPoint>;
     note?: string;
-    pass_fail?: 'Y' | 'N';
 }
 
 export interface QueuedEntry {

@@ -6,41 +6,69 @@ const { tolerance3pct } = require('../lib/tolerance');
 const router = express.Router();
 
 const NOTE_REQUIRED_TYPES = ['manufacturer_spec', 'after_external_cal'];
+const POINTS = ['low', 'mid', 'high'];
 
-function computePassFail(verificationType, volumeUl, massMg, bodyPassFail) {
-    if (verificationType === 'tolerance_3pct') return tolerance3pct(volumeUl, massMg);
-    return bodyPassFail ?? null; // manual for manufacturer_spec / after_external_cal
+function computePointPassFail(verificationType, point) {
+    if (verificationType === 'tolerance_3pct') return tolerance3pct(point.volume_ul, point.mass_mg);
+    return point.pass_fail ?? null; // manual for manufacturer_spec / after_external_cal
+}
+
+function validatePoints(points) {
+    return points && POINTS.every((p) => points[p] && points[p].volume_ul != null && points[p].mass_mg != null);
+}
+
+async function insertEntry(pool, { pipette_id, balance_id, verification_type, points, note, signedByUserId, correctsEntryId }) {
+    const passFail = Object.fromEntries(POINTS.map((p) => [p, computePointPassFail(verification_type, points[p])]));
+
+    const request = pool.request()
+        .input('pipetteId', sql.Int, pipette_id)
+        .input('balanceId', sql.Int, balance_id)
+        .input('verificationType', sql.NVarChar, verification_type)
+        .input('volumeLowUl', sql.Decimal(10, 3), points.low.volume_ul)
+        .input('massLowMg', sql.Decimal(10, 3), points.low.mass_mg)
+        .input('passLow', sql.Char(1), passFail.low)
+        .input('volumeMidUl', sql.Decimal(10, 3), points.mid.volume_ul)
+        .input('massMidMg', sql.Decimal(10, 3), points.mid.mass_mg)
+        .input('passMid', sql.Char(1), passFail.mid)
+        .input('volumeHighUl', sql.Decimal(10, 3), points.high.volume_ul)
+        .input('massHighMg', sql.Decimal(10, 3), points.high.mass_mg)
+        .input('passHigh', sql.Char(1), passFail.high)
+        .input('note', sql.NVarChar(sql.MAX), note ?? null)
+        .input('signedByUserId', sql.Int, signedByUserId)
+        .input('correctsEntryId', sql.Int, correctsEntryId ?? null);
+
+    return request.query(`
+        INSERT INTO entries
+            (pipette_id, balance_id, verification_type,
+             volume_low_ul, mass_low_mg, pass_low,
+             volume_mid_ul, mass_mid_mg, pass_mid,
+             volume_high_ul, mass_high_mg, pass_high,
+             note, signed_by_user_id, signed_at, corrects_entry_id)
+        OUTPUT INSERTED.*
+        VALUES
+            (@pipetteId, @balanceId, @verificationType,
+             @volumeLowUl, @massLowMg, @passLow,
+             @volumeMidUl, @massMidMg, @passMid,
+             @volumeHighUl, @massHighMg, @passHigh,
+             @note, @signedByUserId, SYSUTCDATETIME(), @correctsEntryId);
+    `);
 }
 
 router.post('/entries', async (req, res) => {
-    const { username, pin, pipette_id, balance_id, verification_type, volume_ul, mass_mg, note, pass_fail } = req.body;
+    const { username, pin, pipette_id, balance_id, verification_type, points, note } = req.body;
 
     if (NOTE_REQUIRED_TYPES.includes(verification_type) && !note) {
         return res.status(400).json({ error: 'note is required for this verification_type' });
+    }
+    if (!validatePoints(points)) {
+        return res.status(400).json({ error: 'points.low, points.mid, and points.high (each with volume_ul and mass_mg) are required' });
     }
 
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
 
-    const computedPassFail = computePassFail(verification_type, volume_ul, mass_mg, pass_fail);
-
     const pool = await getPool();
-    const result = await pool.request()
-        .input('pipetteId', sql.Int, pipette_id)
-        .input('balanceId', sql.Int, balance_id)
-        .input('verificationType', sql.NVarChar, verification_type)
-        .input('volumeUl', sql.Decimal(10, 3), volume_ul)
-        .input('massMg', sql.Decimal(10, 3), mass_mg)
-        .input('passFail', sql.Char(1), computedPassFail)
-        .input('note', sql.NVarChar(sql.MAX), note ?? null)
-        .input('signedByUserId', sql.Int, auth.userId)
-        .query(`
-            INSERT INTO entries
-                (pipette_id, balance_id, verification_type, volume_ul, mass_mg, pass_fail, note, signed_by_user_id, signed_at)
-            OUTPUT INSERTED.id, INSERTED.signed_at
-            VALUES
-                (@pipetteId, @balanceId, @verificationType, @volumeUl, @massMg, @passFail, @note, @signedByUserId, SYSUTCDATETIME());
-        `);
+    const result = await insertEntry(pool, { pipette_id, balance_id, verification_type, points, note, signedByUserId: auth.userId });
 
     res.status(201).json(result.recordset[0]);
 });
@@ -50,7 +78,7 @@ router.post('/entries', async (req, res) => {
 // A row where corrects_entry_id is set is itself a correction, so `corrected: true`
 // flags that history exists behind it (fetch via /entries/:id/history).
 router.get('/entries', async (req, res) => {
-    const { pipette_id, balance_id, username, verification_type, pass_fail, from, to } = req.query;
+    const { pipette_id, balance_id, username, verification_type, from, to } = req.query;
 
     const pool = await getPool();
     const result = await pool.request()
@@ -58,7 +86,6 @@ router.get('/entries', async (req, res) => {
         .input('balanceId', sql.Int, balance_id ? Number(balance_id) : null)
         .input('username', sql.NVarChar, username ?? null)
         .input('verificationType', sql.NVarChar, verification_type ?? null)
-        .input('passFail', sql.Char(1), pass_fail ?? null)
         .input('from', sql.DateTime2, from ?? null)
         .input('to', sql.DateTime2, to ?? null)
         .query(`
@@ -77,7 +104,6 @@ router.get('/entries', async (req, res) => {
                 AND (@balanceId IS NULL OR e.balance_id = @balanceId)
                 AND (@username IS NULL OR u.username = @username)
                 AND (@verificationType IS NULL OR e.verification_type = @verificationType)
-                AND (@passFail IS NULL OR e.pass_fail = @passFail)
                 AND (@from IS NULL OR e.signed_at >= @from)
                 AND (@to IS NULL OR e.signed_at <= @to)
             ORDER BY e.signed_at DESC
@@ -88,33 +114,21 @@ router.get('/entries', async (req, res) => {
 
 router.post('/entries/:id/correct', async (req, res) => {
     const { id } = req.params;
-    const { username, pin, pipette_id, balance_id, verification_type, volume_ul, mass_mg, note, pass_fail } = req.body;
+    const { username, pin, pipette_id, balance_id, verification_type, points, note } = req.body;
 
     if (!note) return res.status(400).json({ error: 'note is required for corrections' });
+    if (!validatePoints(points)) {
+        return res.status(400).json({ error: 'points.low, points.mid, and points.high (each with volume_ul and mass_mg) are required' });
+    }
 
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
 
-    const computedPassFail = computePassFail(verification_type, volume_ul, mass_mg, pass_fail);
-
     const pool = await getPool();
-    const result = await pool.request()
-        .input('pipetteId', sql.Int, pipette_id)
-        .input('balanceId', sql.Int, balance_id)
-        .input('verificationType', sql.NVarChar, verification_type)
-        .input('volumeUl', sql.Decimal(10, 3), volume_ul)
-        .input('massMg', sql.Decimal(10, 3), mass_mg)
-        .input('passFail', sql.Char(1), computedPassFail)
-        .input('note', sql.NVarChar(sql.MAX), note)
-        .input('signedByUserId', sql.Int, auth.userId)
-        .input('correctsEntryId', sql.Int, id)
-        .query(`
-            INSERT INTO entries
-                (pipette_id, balance_id, verification_type, volume_ul, mass_mg, pass_fail, note, signed_by_user_id, signed_at, corrects_entry_id)
-            OUTPUT INSERTED.id, INSERTED.signed_at
-            VALUES
-                (@pipetteId, @balanceId, @verificationType, @volumeUl, @massMg, @passFail, @note, @signedByUserId, SYSUTCDATETIME(), @correctsEntryId);
-        `);
+    const result = await insertEntry(pool, {
+        pipette_id, balance_id, verification_type, points, note,
+        signedByUserId: auth.userId, correctsEntryId: id,
+    });
 
     res.status(201).json(result.recordset[0]);
 });
