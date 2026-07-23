@@ -9,15 +9,21 @@ export interface User {
 
 export interface Balance {
     id: number;
-    name: string;
-    location: string | null;
+    equipment_type: 'Balance';
+    equipment_id: string;
+    calibration_due_date: string | null;
 }
 
 export interface Pipette {
     id: number;
-    pipette_number: string;
-    min_range: number;
-    max_range: number;
+    equipment_type: 'Pipette';
+    equipment_id: string;
+    category: string | null;
+    pipette_range: string | null;
+    calibration_due_date: string | null;
+    low_ul: number | null;
+    mid_ul: number | null;
+    high_ul: number | null;
 }
 
 export interface EntryPayload {
