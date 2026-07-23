@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pipette Log -- Project Summary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f7f7f5; --fg: #1a1a1a; --muted: #666; --card: #ffffff;
+    --border: #ddd; --accent: #2a5d50; --accent-fg: #ffffff;
+    --pass: #2a5d50; --pending: #a06a1f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16181a; --fg: #eaeaea; --muted: #9a9a9a; --card: #1f2224;
+      --border: #33383b; --accent: #5fbfa0; --accent-fg: #0c1210;
+      --pass: #5fbfa0; --pending: #d99a3d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.5; }
+  header { padding: 2.5rem 1.5rem 1.5rem; max-width: 900px; margin: 0 auto; }
+  header h1 { margin: 0 0 .25rem; font-size: 1.9rem; }
+  header p { color: var(--muted); margin: 0; }
+  main { max-width: 900px; margin: 0 auto; padding: 0 1.5rem 3rem; }
+  section { margin-top: 2.5rem; }
+  h2 { font-size: 1.15rem; border-bottom: 1px solid var(--border); padding-bottom: .5rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: .75rem; font-size: .92rem; }
+  th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .02em; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.3rem; margin-top: .75rem; }
+  .badge { display: inline-block; font-size: .72rem; font-weight: 700; padding: .15rem .55rem; border-radius: 999px; background: var(--accent); color: var(--accent-fg); }
+  .open { color: var(--pending); font-weight: 600; }
+  code { background: var(--border); padding: .1rem .35rem; border-radius: 4px; font-size: .85em; }
+  ul { margin: .4rem 0; padding-left: 1.3rem; }
+  .overflow { overflow-x: auto; }
+  footer { color: var(--muted); font-size: .8rem; text-align: center; padding: 2rem 1rem 3rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pipette Log</h1>
+  <p>Digitized pipette calibration/verification log -- project summary &amp; architectural decisions. Last updated 2026-07-22.</p>
+</header>
+<main>
+
+<section>
+  <h2>What this is</h2>
+  <div class="card">
+    <p>Replaces the paper pipette-verification form (<code>basic_digital pipette log.pptx</code>) with an iPad app used at the bench. A tech selects a balance and pipette, records Volume/Mass readings, the app determines Pass/Fail where a rule exists, and the tech signs off with a PIN.</p>
+    <p><strong>Source form fields:</strong> Date/Initials &middot; Verification Type (&plusmn;3% Tolerance / Manufacturer specifications / After External Calibration) &middot; Balance Number &middot; Pipette Number &middot; Pipette Range (&micro;L) &middot; Volume (&micro;L) &middot; Mass (mg) &middot; Pass Y/N &middot; Notes.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Confirmed decisions</h2>
+  <div class="overflow">
+  <table>
+    <tr><th>Area</th><th>Decision</th></tr>
+    <tr><td>Client platform</td><td>Native iPad app (Swift/SwiftUI) -- ADR-001</td></tr>
+    <tr><td>Connectivity</td><td>Sync defaults to live over REST; local cache + queued sync is the offline fallback, auto-drains on reconnect -- ADR-002</td></tr>
+    <tr><td>Backend</td><td>New Nexus app (Express REST API + MSSQL, on-prem), reuses <code>@il/db</code> / <code>@il/auth</code> -- ADR-003</td></tr>
+    <tr><td>Identity &amp; sign-off</td><td>Nexus LDAP session + 6-digit PIN per entry -- ADR-004</td></tr>
+    <tr><td>Record integrity</td><td>Regulated-lite (not full 21 CFR Part 11); signed entries immutable; corrections are appended, not edited -- ADR-005</td></tr>
+    <tr><td>Verification types</td><td>3 mutually exclusive types; only &plusmn;3% Tolerance auto-calculates Pass/Fail in v1, other two are manual with a required note -- ADR-006</td></tr>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Architectural Decision Records</h2>
+  <div class="overflow">
+  <table>
+    <tr><th>ADR</th><th>Title</th><th>Status</th><th>Layers</th></tr>
+    <tr><td>001</td><td>Native iPad Client</td><td><span class="badge">ACCEPTED</span></td><td>Client</td></tr>
+    <tr><td>002</td><td>Offline-First With Deferred Sync</td><td><span class="badge">ACCEPTED</span></td><td>Client &middot; Backend</td></tr>
+    <tr><td>003</td><td>Backend Built as a Nexus App (Express + MSSQL, On-Prem)</td><td><span class="badge">ACCEPTED</span></td><td>Backend &middot; Database</td></tr>
+    <tr><td>004</td><td>6-Digit PIN Sign-Off Layered on Nexus Session Identity</td><td><span class="badge">ACCEPTED</span></td><td>Client &middot; Backend</td></tr>
+    <tr><td>005</td><td>Regulated-Lite Record Integrity -- Amend-Only Corrections</td><td><span class="badge">ACCEPTED</span></td><td>Backend &middot; Database</td></tr>
+    <tr><td>006</td><td>Verification Type Model and Pass/Fail Calculation</td><td><span class="badge">ACCEPTED</span></td><td>Backend &middot; Database &middot; Client</td></tr>
+  </table>
+  </div>
+  <p style="color:var(--muted); font-size:.85rem; margin-top:.5rem;">Full text: <code>docs/Obsidian Vault/Pipette Log/ADR-00#-*.md</code></p>
+</section>
+
+<section>
+  <h2>Open questions (flagged in ADRs, not yet decided)</h2>
+  <div class="card">
+    <ul>
+      <li class="open">Sync protocol/transport between iPad client and REST backend (poll vs push, delta sync, reconnect detection) -- ADR-002</li>
+      <li class="open">How stale cached reference data is surfaced to the tech during an outage -- ADR-002</li>
+      <li class="open">Whether balance/pipette reference data is owned by Pipette Log's own DB or pulled from an existing Nexus app (<code>asset-manager</code>, <code>instrument-status</code>) -- ADR-003</li>
+      <li class="open">Where/how PINs are set and reset, and whether re-entry is required per-entry or per-session -- ADR-004</li>
+      <li class="open">Whether unsigned draft entries are mutable before sign-off (current assumption: yes) -- ADR-005</li>
+      <li class="open">Exact &plusmn;3% tolerance formula (Mass&rarr;Volume conversion) -- must come from the source SOP, not guessed -- ADR-006</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+<footer>Pipette Log &middot; generated from ADR-001 through ADR-006</footer>
+</body>
+</html>

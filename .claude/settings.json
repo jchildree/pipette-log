@@ -1,0 +1,65 @@
+{
+    "hooks":  {
+                  "SessionStart":  [
+                                       {
+                                           "hooks":  [
+                                                         {
+                                                             "type":  "command",
+                                                             "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\captain-caveman.js\"",
+                                                             "timeout":  5000
+                                                         }
+                                                     ]
+                                       },
+                                       {
+                                           "hooks":  [
+                                                         {
+                                                             "type":  "command",
+                                                             "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\caveman-activate.js\"",
+                                                             "timeout":  5000
+                                                         }
+                                                     ]
+                                       },
+                                       {
+                                           "hooks":  [
+                                                         {
+                                                             "type":  "command",
+                                                             "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\skill-metadata-loader.js\"",
+                                                             "timeout":  5000
+                                                         }
+                                                     ]
+                                       },
+                                       {
+                                           "hooks":  [
+                                                         {
+                                                             "type":  "command",
+                                                             "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\wiki-memory-inject.js\"",
+                                                             "timeout":  5000
+                                                         }
+                                                     ]
+                                       }
+                                   ],
+                  "UserPromptSubmit":  [
+                                           {
+                                               "hooks":  [
+                                                             {
+                                                                 "type":  "command",
+                                                                 "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\caveman-mode-tracker.js\"",
+                                                                 "timeout":  5000
+                                                             }
+                                                         ]
+                                           }
+                                       ],
+                  "PostToolUse":  [
+                                      {
+                                          "matcher":  "Write|Edit",
+                                          "hooks":  [
+                                                        {
+                                                            "type":  "command",
+                                                            "command":  "node \"C:\\Users\\jchildree\\OneDrive - TheIndustrialLaboratoriesCompany\\Desktop\\Projects\\Pipette Log\\.claude\\hooks\\check-encoding.js\"",
+                                                            "timeout":  5000
+                                                        }
+                                                    ]
+                                      }
+                                  ]
+              }
+}
