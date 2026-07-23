@@ -1,4 +1,4 @@
-import { Balance, EntryPayload, Pipette, User } from './types';
+import { AuditEntry, AuditListFilters, Balance, EntryPayload, Pipette, User } from './types';
 
 // Set via app.json "extra.apiUrl" or EXPO_PUBLIC_API_URL env var at build time.
 const API_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000';
@@ -25,3 +25,14 @@ export const submitEntry = (payload: EntryPayload) =>
         method: 'POST',
         body: JSON.stringify(payload),
     });
+
+export const fetchEntries = (filters: AuditListFilters = {}) => {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+    });
+    const query = params.toString();
+    return apiFetch<AuditEntry[]>(`/entries${query ? `?${query}` : ''}`);
+};
+
+export const fetchEntryHistory = (id: number) => apiFetch<AuditEntry[]>(`/entries/${id}/history`);

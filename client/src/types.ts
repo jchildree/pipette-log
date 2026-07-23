@@ -49,3 +49,39 @@ export interface QueuedEntry {
     payload: EntryPayload;
     queuedAt: string;
 }
+
+// Shape returned by GET /api/entries and /api/entries/:id/history --
+// raw entries row plus the joined readable names (list endpoint only).
+export interface AuditEntry {
+    id: number;
+    pipette_id: number;
+    balance_id: number;
+    verification_type: VerificationType;
+    volume_low_ul: number;
+    mass_low_mg: number;
+    pass_low: 'Y' | 'N' | null;
+    volume_mid_ul: number;
+    mass_mid_mg: number;
+    pass_mid: 'Y' | 'N' | null;
+    volume_high_ul: number;
+    mass_high_mg: number;
+    pass_high: 'Y' | 'N' | null;
+    note: string | null;
+    signed_by_user_id: number | null;
+    signed_at: string | null;
+    corrects_entry_id: number | null;
+    created_at: string;
+    pipette_equipment_id?: string;
+    balance_equipment_id?: string;
+    signed_by_username?: string;
+    corrected?: 0 | 1;
+}
+
+export interface AuditListFilters {
+    pipette_id?: number;
+    balance_id?: number;
+    username?: string;
+    verification_type?: VerificationType;
+    from?: string;
+    to?: string;
+}
