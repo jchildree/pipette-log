@@ -16,6 +16,14 @@ router.get('/pipettes', async (req, res) => {
     res.json(result.recordset);
 });
 
+// Repeater tips (ADR-011): selecting a tip drives that entry's low/mid/high targets,
+// same pre-fill pattern as a pipette's own low_ul/mid_ul/high_ul.
+router.get('/tips', async (req, res) => {
+    const pool = await getPool();
+    const result = await pool.request().query('SELECT * FROM tips ORDER BY tip_id');
+    res.json(result.recordset);
+});
+
 // Reference data is PipetteLog-owned (Build Plan section 1) but the blueprint never
 // specified how it's entered -- reusing the same username+PIN auth as /entries rather
 // than leaving these writes unauthenticated.
@@ -53,6 +61,22 @@ router.post('/pipettes', async (req, res) => {
             OUTPUT INSERTED.*
             VALUES ('Pipette', @equipmentId, @category, @pipetteRange, @calibrationDueDate, @lowUl, @midUl, @highUl)
         `);
+    res.status(201).json(result.recordset[0]);
+});
+
+router.post('/tips', async (req, res) => {
+    const { username, pin, tip_id, low_ul, mid_ul, high_ul } = req.body;
+    const auth = await checkPin(username, pin);
+    if (!auth.ok) return res.status(401).json({ error: auth.reason });
+    if (!tip_id) return res.status(400).json({ error: 'tip_id is required' });
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('tipId', sql.NVarChar, tip_id)
+        .input('lowUl', sql.Decimal(10, 3), low_ul ?? null)
+        .input('midUl', sql.Decimal(10, 3), mid_ul ?? null)
+        .input('highUl', sql.Decimal(10, 3), high_ul ?? null)
+        .query('INSERT INTO tips (tip_id, low_ul, mid_ul, high_ul) OUTPUT INSERTED.* VALUES (@tipId, @lowUl, @midUl, @highUl)');
     res.status(201).json(result.recordset[0]);
 });
 

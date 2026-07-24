@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Picker } from '@react-native-picker/picker';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { fetchBalances, fetchEntries, fetchEntryHistory, fetchPipettes } from '../api';
-import { AuditEntry, Balance, Pipette, PointKey, VerificationType } from '../types';
+import type { AuditEntry, Balance, Pipette, PointKey, VerificationType } from '../types';
+import './AuditLog.css';
 
 const VERIFICATION_TYPE_LABELS: Record<VerificationType, string> = {
     tolerance_3pct: '±3% Tolerance',
@@ -25,8 +24,8 @@ function pointValues(entry: AuditEntry, key: PointKey) {
 }
 
 function PassBadge({ pass }: { pass: 'Y' | 'N' | null }) {
-    if (pass === null) return <Text style={styles.badgeNeutral}>--</Text>;
-    return <Text style={pass === 'Y' ? styles.badgePass : styles.badgeFail}>{pass}</Text>;
+    if (pass === null) return <span className="badgeNeutral">--</span>;
+    return <span className={pass === 'Y' ? 'badgePass' : 'badgeFail'}>{pass}</span>;
 }
 
 export default function AuditLog() {
@@ -49,6 +48,7 @@ export default function AuditLog() {
 
     useEffect(() => {
         loadEntries();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [pipetteFilter, balanceFilter]);
 
     async function loadEntries() {
@@ -77,130 +77,88 @@ export default function AuditLog() {
     }
 
     return (
-        <ScrollView contentContainerStyle={styles.container}>
-            <Text style={styles.title}>Audit Log</Text>
+        <div className="container">
+            <div className="title">Audit Log</div>
 
-            <View style={styles.filterRow}>
-                <View style={styles.filterField}>
-                    <Text style={styles.filterLabel}>Pipette</Text>
-                    <Picker selectedValue={pipetteFilter} onValueChange={setPipetteFilter}>
-                        <Picker.Item label="All" value={null} />
+            <div className="filterRow">
+                <div className="filterField">
+                    <label className="filterLabel">Pipette</label>
+                    <select value={pipetteFilter ?? ''} onChange={(e) => setPipetteFilter(e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">All</option>
                         {pipettes.map((p) => (
-                            <Picker.Item key={p.id} label={p.equipment_id} value={p.id} />
+                            <option key={p.id} value={p.id}>{p.equipment_id}</option>
                         ))}
-                    </Picker>
-                </View>
-                <View style={styles.filterField}>
-                    <Text style={styles.filterLabel}>Balance</Text>
-                    <Picker selectedValue={balanceFilter} onValueChange={setBalanceFilter}>
-                        <Picker.Item label="All" value={null} />
+                    </select>
+                </div>
+                <div className="filterField">
+                    <label className="filterLabel">Balance</label>
+                    <select value={balanceFilter ?? ''} onChange={(e) => setBalanceFilter(e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">All</option>
                         {balances.map((b) => (
-                            <Picker.Item key={b.id} label={b.equipment_id} value={b.id} />
+                            <option key={b.id} value={b.id}>{b.equipment_id}</option>
                         ))}
-                    </Picker>
-                </View>
-            </View>
+                    </select>
+                </div>
+            </div>
 
-            {loading && <Text style={styles.status}>Loading...</Text>}
-            {error && <Text style={styles.error}>{error}</Text>}
-            {!loading && !error && entries.length === 0 && <Text style={styles.status}>No entries found.</Text>}
+            {loading && <div className="status">Loading...</div>}
+            {error && <div className="error">{error}</div>}
+            {!loading && !error && entries.length === 0 && <div className="status">No entries found.</div>}
 
             {entries.map((entry) => (
-                <Pressable key={entry.id} style={styles.entryCard} onPress={() => openHistory(entry)}>
-                    <View style={styles.entryHeader}>
-                        <Text style={styles.entryDate}>{entry.signed_at ? new Date(entry.signed_at).toLocaleString() : 'unsigned'}</Text>
-                        {!!entry.corrected && <Text style={styles.correctedTag}>corrected</Text>}
-                    </View>
-                    <Text style={styles.entryMeta}>
+                <button key={entry.id} className="entryCard" onClick={() => openHistory(entry)}>
+                    <div className="entryHeader">
+                        <span className="entryDate">{entry.signed_at ? new Date(entry.signed_at).toLocaleString() : 'unsigned'}</span>
+                        {!!entry.corrected && <span className="correctedTag">corrected</span>}
+                    </div>
+                    <div className="entryMeta">
                         {VERIFICATION_TYPE_LABELS[entry.verification_type]} · Pipette {entry.pipette_equipment_id ?? entry.pipette_id} · Balance{' '}
                         {entry.balance_equipment_id ?? entry.balance_id} · Signed by {entry.signed_by_username ?? entry.signed_by_user_id}
-                    </Text>
-                    <View style={styles.pointRow}>
+                    </div>
+                    <div className="pointRow">
                         {POINTS.map(({ key, label }) => {
                             const v = pointValues(entry, key);
                             return (
-                                <View style={styles.pointCell} key={key}>
-                                    <Text style={styles.pointLabel}>{label}</Text>
-                                    <Text style={styles.pointValue}>
-                                        {v.volume}µL / {v.mass}mg
-                                    </Text>
+                                <div className="pointCell" key={key}>
+                                    <span className="pointLabel">{label}</span>
+                                    <span className="pointValue">{v.volume}µL / {v.mass}mg</span>
                                     <PassBadge pass={v.pass} />
-                                </View>
+                                </div>
                             );
                         })}
-                    </View>
-                    {entry.note && <Text style={styles.entryNote}>Note: {entry.note}</Text>}
-                </Pressable>
+                    </div>
+                    {entry.note && <div className="entryNote">Note: {entry.note}</div>}
+                </button>
             ))}
 
-            <Modal visible={historyFor !== null} transparent animationType="fade" onRequestClose={() => setHistoryFor(null)}>
-                <View style={styles.modalBackdrop}>
-                    <View style={styles.modalCard}>
-                        <Text style={styles.modalTitle}>Entry History</Text>
-                        <ScrollView style={styles.historyScroll}>
+            {historyFor && (
+                <div className="modalBackdrop" onClick={() => setHistoryFor(null)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Entry History</div>
+                        <div className="historyScroll">
                             {history.map((h, i) => (
-                                <View key={h.id} style={styles.historyRow}>
-                                    <Text style={styles.historyRowTitle}>
+                                <div key={h.id} className="historyRow">
+                                    <div className="historyRowTitle">
                                         {i === 0 ? 'Original' : `Correction ${i}`} (id {h.id}) -- {h.signed_at ? new Date(h.signed_at).toLocaleString() : 'unsigned'}
-                                    </Text>
+                                    </div>
                                     {POINTS.map(({ key, label }) => {
                                         const v = pointValues(h, key);
                                         return (
-                                            <Text key={key} style={styles.historyPointLine}>
+                                            <div key={key} className="historyPointLine">
                                                 {label}: {v.volume}µL / {v.mass}mg &rarr; {v.pass ?? '--'}
-                                            </Text>
+                                            </div>
                                         );
                                     })}
-                                    {h.note && <Text style={styles.historyNote}>Note: {h.note}</Text>}
-                                </View>
+                                    {h.note && <div className="historyNote">Note: {h.note}</div>}
+                                </div>
                             ))}
-                        </ScrollView>
-                        <Text style={styles.closeButton} onPress={() => setHistoryFor(null)}>
+                        </div>
+                        <button type="button" className="closeButton" onClick={() => setHistoryFor(null)}>
                             Close
-                        </Text>
-                    </View>
-                </View>
-            </Modal>
-        </ScrollView>
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
-
-const BRAND_BLUE = '#1298c9';
-const BRAND_LIGHT = '#d6ecf7';
-const BRAND_BORDER = '#7ec8e3';
-
-const styles = StyleSheet.create({
-    container: { padding: 16, gap: 4 },
-    title: { fontSize: 20, fontWeight: '700', marginBottom: 12 },
-    status: { marginTop: 12, textAlign: 'center', color: '#555' },
-    error: { marginTop: 12, textAlign: 'center', color: '#b91c1c' },
-
-    filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
-    filterField: { flexGrow: 1, flexBasis: 160, backgroundColor: BRAND_LIGHT, borderWidth: 1, borderColor: BRAND_BORDER, borderRadius: 8, padding: 8 },
-    filterLabel: { fontWeight: '600', fontSize: 12 },
-
-    entryCard: { borderWidth: 1, borderColor: BRAND_BORDER, borderRadius: 8, padding: 12, marginTop: 10, backgroundColor: '#fff' },
-    entryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    entryDate: { fontWeight: '700' },
-    correctedTag: { backgroundColor: '#fde68a', color: '#78350f', fontSize: 11, fontWeight: '700', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-    entryMeta: { color: '#1a4d5c', fontSize: 12, marginTop: 2 },
-    entryNote: { marginTop: 6, fontStyle: 'italic', color: '#555' },
-
-    pointRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-    pointCell: { flex: 1, backgroundColor: '#eef7fb', borderRadius: 6, padding: 6, alignItems: 'center' },
-    pointLabel: { fontWeight: '700', fontSize: 12 },
-    pointValue: { fontSize: 11, color: '#333' },
-    badgePass: { color: '#166534', fontWeight: '700' },
-    badgeFail: { color: '#b91c1c', fontWeight: '700' },
-    badgeNeutral: { color: '#777' },
-
-    modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 },
-    modalCard: { backgroundColor: '#fff', borderRadius: 12, padding: 20, maxHeight: '80%' },
-    modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: 8 },
-    historyScroll: { maxHeight: 400 },
-    historyRow: { borderTopWidth: 1, borderTopColor: BRAND_BORDER, paddingVertical: 8 },
-    historyRowTitle: { fontWeight: '700', marginBottom: 4 },
-    historyPointLine: { fontSize: 12, color: '#333' },
-    historyNote: { marginTop: 4, fontStyle: 'italic', color: '#555' },
-    closeButton: { marginTop: 16, textAlign: 'center', backgroundColor: BRAND_BLUE, color: '#fff', padding: 10, borderRadius: 8, fontWeight: '600' },
-});

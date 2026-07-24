@@ -4,12 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo actually is
 
-No application code yet. Root contains:
+A working pipette/balance calibration sign-off app. Two pieces:
+- `backend/` -- Express + `mssql` REST API (Node, JS). `npm test` / `npm run test:integration` (needs local SQL Server, see `backend/README.md`). Schema lives in `backend/sqlSchemas/*.sql`, applied in numeric order.
+- `client/` -- React + TypeScript + Vite web app (`npm run dev`, defaults to `:8081`). No React Native/Expo -- see ADR-012 for why (Expo's Metro web dev server was undebuggable under this OneDrive-synced path; plain Vite also matches the real internal Nexus platform's client pattern).
+
+All design decisions are recorded as ADRs in `docs/Obsidian Vault/Pipette Log/` -- `INDEX.md` is the table of contents, read the relevant ADR before changing behavior it governs rather than re-deriving intent from the code alone.
+
+This repo is meant to eventually move into the company's Nexus monorepo (`../nexus/`) as `apps/pipette-log`, matching that repo's `shared/server/client` workspace shape -- not done yet since push access there is currently scoped to `apps/eqms` only.
+
+Other root contents:
 - `.claude/` -- an installed Claude-ITect-Skill pack (54 skills, 4 agents, hooks) wired into `settings.json`
 - `Claud-itect-Skill-main/` -- the source repo for that same skill pack (installer scripts, skill/agent/hook source, its own `README.md`/`CLAUDE.md`)
-- `basic_digital pipette log.pptx` -- a slide deck, likely the actual project's spec/design source
-
-There is no `package.json`, `src/`, build step, lint config, or test suite at the project root. There is nothing to build or run for "Pipette Log" itself yet.
+- `basic_digital pipette log.pptx` -- original spec/design source slide deck
 
 ## Working with the skill pack
 
@@ -22,6 +28,3 @@ cd "Claud-itect-Skill-main"
 
 Full details on the skill/agent/hook file formats, the caveman hook system, and its security constraints (symlink rejection, 64-byte flag-file cap, mode whitelist) are in `Claud-itect-Skill-main/CLAUDE.md` -- read that before touching anything under `hooks/`.
 
-## Starting actual project work
-
-If the task is to build out the Pipette Log application itself, there is no existing architecture to preserve -- check `basic_digital pipette log.pptx` for the intended spec/scope before scaffolding, since it's the only project-specific source of truth in this repo.

@@ -1,19 +1,32 @@
-# Pipette Log Client (Expo / React Native)
+# React + TypeScript + Vite
 
-## Dev
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-```bash
-npm install
-npx expo start
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+
+## React Compiler
+
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+
+## Expanding the Oxlint configuration
+
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
 ```
 
-Point at your backend via `EXPO_PUBLIC_API_URL` (defaults to `http://localhost:3000`).
-
-## Shipping to iPad (EAS, no Mac required)
-
-`eas.json` is scaffolded with `development`/`preview`/`production` profiles. Not runnable yet -- you need two accounts first:
-
-1. **Expo account** (free) -- create at expo.dev, then `npx eas-cli login` from this directory.
-2. **Apple Developer Program** ($99/yr) -- required for any real iOS build/signing, even through EAS. Enroll at developer.apple.com.
-3. `ios.bundleIdentifier` in `app.json` is currently a **placeholder** (`com.industriallaboratories.pipettelog`) -- confirm/change it before your first build; it must be unique and match what you register in App Store Connect.
-4. Once both accounts exist: `eas build:configure` (links the project to your Expo account), then `eas build --platform ios --profile preview` for an internal TestFlight-style build -- EAS builds and signs remotely, no local Mac needed at any step.
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.

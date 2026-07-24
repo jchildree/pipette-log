@@ -1,7 +1,7 @@
 # ADR-008: React Native / Expo Client (Supersedes ADR-001)
 
 **Project:** Pipette Log
-Status: ACCEPTED
+Status: DEPRECATED (superseded by ADR-012)
 Date: 2026-07-23
 Authors: Joseph Childree
 Affected Layers: Client

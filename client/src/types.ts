@@ -26,13 +26,49 @@ export interface Pipette {
     high_ul: number | null;
 }
 
+export interface BalancePayload {
+    username: string;
+    pin: string;
+    equipment_id: string;
+    calibration_due_date?: string;
+}
+
+export interface PipettePayload {
+    username: string;
+    pin: string;
+    equipment_id: string;
+    category?: string;
+    pipette_range?: string;
+    calibration_due_date?: string;
+    low_ul?: number;
+    mid_ul?: number;
+    high_ul?: number;
+}
+
 export interface MeasurementPoint {
     volume_ul: number;
     mass_mg: number;
     pass_fail?: 'Y' | 'N'; // manual only, ignored for tolerance_3pct (server computes)
+    attempts?: { volume_ul: number; mass_mg: number }[]; // failed retries before this reading, tolerance_3pct only (ADR-010)
 }
 
 export type PointKey = 'low' | 'mid' | 'high';
+
+// Repeater tip reference data (ADR-011): selecting a tip drives that entry's
+// low/mid/high targets, same pre-fill pattern as a pipette's own reference values.
+export interface Tip {
+    id: number;
+    tip_id: string;
+    low_ul: number | null;
+    mid_ul: number | null;
+    high_ul: number | null;
+}
+
+// One multichannel channel's low/mid/high triplet (ADR-011).
+export interface ChannelPoints {
+    channel: number; // 1-8
+    points: Record<PointKey, MeasurementPoint>;
+}
 
 export interface EntryPayload {
     username: string;
@@ -40,7 +76,8 @@ export interface EntryPayload {
     pipette_id: number;
     balance_id: number;
     verification_type: VerificationType;
-    points: Record<PointKey, MeasurementPoint>;
+    points: Record<PointKey, MeasurementPoint>; // channel 1 (or the only channel) -- always required
+    channels?: ChannelPoints[]; // present for multichannel pipettes only (ADR-011)
     note?: string;
 }
 

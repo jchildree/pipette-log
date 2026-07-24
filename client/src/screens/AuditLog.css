@@ -1,0 +1,34 @@
+.container { padding: 16px; max-width: 900px; margin: 0 auto; }
+.title { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+.status { margin-top: 12px; text-align: center; color: #555; }
+.error { margin-top: 12px; text-align: center; color: #b91c1c; }
+
+.filterRow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.filterField { flex: 1 1 160px; background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 8px; padding: 8px; }
+.filterLabel { font-weight: 600; font-size: 12px; display: block; }
+.filterField select { width: 100%; margin-top: 4px; }
+
+.entryCard { border: 1px solid var(--brand-border); border-radius: 8px; padding: 12px; margin-top: 10px; background: #fff; cursor: pointer; text-align: left; width: 100%; }
+.entryHeader { display: flex; justify-content: space-between; align-items: center; }
+.entryDate { font-weight: 700; }
+.correctedTag { background: #fde68a; color: #78350f; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+.entryMeta { color: #1a4d5c; font-size: 12px; margin-top: 2px; }
+.entryNote { margin-top: 6px; font-style: italic; color: #555; }
+
+.pointRow { display: flex; gap: 8px; margin-top: 8px; }
+.pointCell { flex: 1; background: #eef7fb; border-radius: 6px; padding: 6px; text-align: center; }
+.pointLabel { font-weight: 700; font-size: 12px; display: block; }
+.pointValue { font-size: 11px; color: #333; display: block; }
+.badgePass { color: #166534; font-weight: 700; }
+.badgeFail { color: #b91c1c; font-weight: 700; }
+.badgeNeutral { color: #777; }
+
+.modalBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
+.modalCard { background: #fff; border-radius: 12px; padding: 20px; max-height: 80%; width: 100%; max-width: 500px; display: flex; flex-direction: column; }
+.modalTitle { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.historyScroll { max-height: 400px; overflow-y: auto; }
+.historyRow { border-top: 1px solid var(--brand-border); padding: 8px 0; }
+.historyRowTitle { font-weight: 700; margin-bottom: 4px; }
+.historyPointLine { font-size: 12px; color: #333; display: block; }
+.historyNote { margin-top: 4px; font-style: italic; color: #555; }
+.closeButton { margin-top: 16px; text-align: center; background: var(--brand-blue); color: #fff; padding: 10px; border-radius: 8px; font-weight: 600; border: none; width: 100%; cursor: pointer; }
