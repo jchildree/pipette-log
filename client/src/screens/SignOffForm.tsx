@@ -128,6 +128,9 @@ export default function SignOffForm() {
     // Pre-fill each point's Volume (editable, per ADR-009): from the selected tip for
     // repeaters (ADR-011, since a repeater's targets follow the tip, not the pipette),
     // otherwise from the pipette's own reference low/mid/high, applied to every active channel.
+    // Runs only on pipette/tip switch (see deps) -- always overwrites rather than fill-if-empty,
+    // so a stale prior selection's values never survive a switch (investigate: Case - Channel 1
+    // Keeps Stale Pipette Volumes On Switch).
     useEffect(() => {
         const source = isRepeater ? selectedTip : selectedPipette;
         if (!source) return;
@@ -136,9 +139,9 @@ export default function SignOffForm() {
             for (const ch of activeChannels) {
                 const row = prev[ch];
                 next[ch] = {
-                    low: { ...row.low, current: { ...row.low.current, volumeUl: row.low.current.volumeUl || (source.low_ul != null ? String(source.low_ul) : '') } },
-                    mid: { ...row.mid, current: { ...row.mid.current, volumeUl: row.mid.current.volumeUl || (source.mid_ul != null ? String(source.mid_ul) : '') } },
-                    high: { ...row.high, current: { ...row.high.current, volumeUl: row.high.current.volumeUl || (source.high_ul != null ? String(source.high_ul) : '') } },
+                    low: { ...row.low, current: { ...row.low.current, volumeUl: source.low_ul != null ? String(source.low_ul) : '' } },
+                    mid: { ...row.mid, current: { ...row.mid.current, volumeUl: source.mid_ul != null ? String(source.mid_ul) : '' } },
+                    high: { ...row.high, current: { ...row.high.current, volumeUl: source.high_ul != null ? String(source.high_ul) : '' } },
                 };
             }
             return next;
