@@ -2,7 +2,32 @@
 
 Pipette/balance calibration sign-off app. `backend/` is an Express + MSSQL REST API, `client/` is a React + Vite web app.
 
-## 1. Database (Docker)
+## Quick start (downloaded release build)
+
+If you got this as a zip from a GitHub Release, `client/dist/` is already built -- skip straight to serving it, no `npm install` needed on the client side.
+
+**Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Node.js](https://nodejs.org/) (v18+) installed.
+
+```bash
+# 1. Database
+cp .env.example .env   # set DB_PASSWORD to a strong password
+docker compose up -d
+
+# 2. Backend (new terminal)
+cd backend
+cp .env.example .env   # DB_PASSWORD must match the root .env
+npm install
+npm start
+
+# 3. Client (new terminal)
+npx serve -l 8081 client/dist
+```
+
+Open `http://localhost:8081`. `VITE_API_URL` is baked into this build as `http://localhost:3000` -- if your backend runs somewhere else, rebuild from source with a different `client/.env` instead (see [Client](#3-client) below).
+
+## Building from source
+
+### 1. Database (Docker)
 
 ```bash
 cp .env.example .env   # set DB_PASSWORD to a strong password
@@ -11,7 +36,7 @@ docker compose up -d
 
 This starts SQL Server, creates the `PipetteLog` database, and applies every schema in `backend/sqlSchemas/` in order. `mssql-init` exits once done; `mssql` keeps running.
 
-## 2. Backend
+### 2. Backend
 
 ```bash
 cd backend
@@ -20,7 +45,7 @@ npm install
 npm run dev   # or: npm start
 ```
 
-## 3. Client
+### 3. Client
 
 ```bash
 cd client
@@ -36,9 +61,18 @@ npm run dev     # local dev server
 npm run build   # production build, output in client/dist
 ```
 
-## 4. First login
+## Using the app
 
-Open the client and use the **Sign Up** tab to create a username/PIN -- no admin step required. That account can then sign on to the **Sign Off** tab.
+Four tabs across the top:
+
+- **Sign Off** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, choose a verification type, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Signing asks for a technician username + PIN, created via Sign Up below.
+- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history.
+- **Equipment** -- add new pipettes and balances to the reference data (equipment ID, category, calibration due date, low/mid/high targets, etc.). Also requires a technician username + PIN.
+- **Sign Up** -- create a new technician username + PIN. No admin approval needed -- this is what a first-time user does before using Sign Off or Equipment.
+
+### First login
+
+Open the client, go to **Sign Up**, create a username/PIN. That account can then sign on to **Sign Off** or **Equipment**.
 
 ## Tests
 
