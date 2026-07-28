@@ -2,14 +2,16 @@ import { useEffect, useState } from 'react';
 import SignOffForm from './screens/SignOffForm';
 import AuditLog from './screens/AuditLog';
 import EquipmentManager from './screens/EquipmentManager';
+import SignUp from './screens/SignUp';
 import { watchConnectivityAndDrain } from './network';
 
-type Tab = 'signoff' | 'audit' | 'equipment';
+type Tab = 'signoff' | 'audit' | 'equipment' | 'signup';
 
 const TABS: { key: Tab; label: string }[] = [
     { key: 'signoff', label: 'Sign Off' },
     { key: 'audit', label: 'Audit Log' },
     { key: 'equipment', label: 'Equipment' },
+    { key: 'signup', label: 'Sign Up' },
 ];
 
 export default function App() {
@@ -47,6 +49,7 @@ export default function App() {
             {tab === 'signoff' && <SignOffForm />}
             {tab === 'audit' && <AuditLog />}
             {tab === 'equipment' && <EquipmentManager />}
+            {tab === 'signup' && <SignUp />}
         </div>
     );
 }
