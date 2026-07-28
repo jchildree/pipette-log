@@ -28,6 +28,26 @@ function detectCategory(category: string | null) {
     return { isMultichannel: c.includes('multi'), isRepeater: c.includes('repeater') };
 }
 
+// ADR-013: canonical storage/calc stay uL/mg everywhere; `unit` only changes what
+// the tech sees/types in the Volume/Mass columns, converted at this boundary.
+const UNIT_FACTOR = { uL: 1, mL: 1000 } as const;
+
+function toDisplay(canonicalUl: string, unit: 'uL' | 'mL'): string {
+    if (canonicalUl === '') return '';
+    const n = Number(canonicalUl);
+    if (Number.isNaN(n)) return canonicalUl;
+    const factor = UNIT_FACTOR[unit];
+    return factor === 1 ? canonicalUl : String(n / factor);
+}
+
+function toCanonical(displayValue: string, unit: 'uL' | 'mL'): string {
+    if (displayValue === '') return '';
+    const n = Number(displayValue);
+    if (Number.isNaN(n)) return displayValue;
+    const factor = UNIT_FACTOR[unit];
+    return factor === 1 ? displayValue : String(n * factor);
+}
+
 interface PointRow {
     volumeUl: string;
     massMg: string;
@@ -124,6 +144,8 @@ export default function SignOffForm() {
 
     const { isMultichannel, isRepeater } = detectCategory(selectedPipette?.category ?? null);
     const activeChannels = isMultichannel ? ALL_CHANNELS : [1];
+    const activeUnit = (isRepeater ? selectedTip?.unit : selectedPipette?.unit) ?? 'uL';
+    const massUnitLabel = activeUnit === 'mL' ? 'g' : 'mg';
 
     // Pre-fill each point's Volume (editable, per ADR-009): from the selected tip for
     // repeaters (ADR-011, since a repeater's targets follow the tip, not the pipette),
@@ -305,6 +327,9 @@ export default function SignOffForm() {
                         <div className="cardMeta">
                             <div className="cardMetaLine">Pipette Range: {selectedPipette.pipette_range ?? 'n/a'}</div>
                             <div className="cardMetaLine">Calibration Due Date: {selectedPipette.calibration_due_date ?? 'n/a'}</div>
+                            {selectedPipette.low_usage_ul != null && (
+                                <div className="cardMetaLine">Low Usage: {toDisplay(String(selectedPipette.low_usage_ul), selectedPipette.unit ?? 'uL')} {selectedPipette.unit ?? 'uL'}</div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -318,6 +343,11 @@ export default function SignOffForm() {
                                 <option key={t.id} value={t.id}>{t.tip_id}</option>
                             ))}
                         </select>
+                        {selectedTip?.low_usage_ul != null && (
+                            <div className="cardMeta">
+                                <div className="cardMetaLine">Low Usage: {toDisplay(String(selectedTip.low_usage_ul), selectedTip.unit ?? 'uL')} {selectedTip.unit ?? 'uL'}</div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -365,8 +395,8 @@ export default function SignOffForm() {
                     {isMultichannel && <span className="channelHeader">Channel {ch}</span>}
                     <div className="table">
                         <div className="tableHeaderRow">
-                            <span className="tableHeaderCell">Volume (µL)</span>
-                            <span className="tableHeaderCell">Mass (mg)</span>
+                            <span className="tableHeaderCell">Volume ({activeUnit})</span>
+                            <span className="tableHeaderCell">Mass ({massUnitLabel})</span>
                             <span className="tableHeaderCell">Pass (Y/N)</span>
                         </div>
                         {POINTS.map(({ key }) => {
@@ -376,14 +406,14 @@ export default function SignOffForm() {
                                     <div className="tableRow">
                                         <input
                                             className="tableCellInput"
-                                            value={point.current.volumeUl}
-                                            onChange={(e) => updateRow(ch, key, 'volumeUl', e.target.value)}
+                                            value={toDisplay(point.current.volumeUl, activeUnit)}
+                                            onChange={(e) => updateRow(ch, key, 'volumeUl', toCanonical(e.target.value, activeUnit))}
                                             inputMode="decimal"
                                         />
                                         <input
                                             className="tableCellInput"
-                                            value={point.current.massMg}
-                                            onChange={(e) => updateRow(ch, key, 'massMg', e.target.value)}
+                                            value={toDisplay(point.current.massMg, activeUnit)}
+                                            onChange={(e) => updateRow(ch, key, 'massMg', toCanonical(e.target.value, activeUnit))}
                                             inputMode="decimal"
                                         />
                                         {passFailEditable ? (
@@ -404,8 +434,8 @@ export default function SignOffForm() {
                                             </button>
                                             {point.expanded && point.attempts.map((a, i) => (
                                                 <div className="attemptRow" key={i}>
-                                                    <span className="attemptCell">{a.volumeUl} µL</span>
-                                                    <span className="attemptCell">{a.massMg} mg</span>
+                                                    <span className="attemptCell">{toDisplay(a.volumeUl, activeUnit)} {activeUnit}</span>
+                                                    <span className="attemptCell">{toDisplay(a.massMg, activeUnit)} {massUnitLabel}</span>
                                                     <span className="attemptCell attemptFail">N</span>
                                                 </div>
                                             ))}

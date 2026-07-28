@@ -14,5 +14,6 @@
 | ADR-010 | Per-Point Retry Attempt Tracking (tolerance_3pct only) | ACCEPTED | Backend · Database · Client | 2026-07-24 |
 | ADR-011 | Multichannel (8-Channel) Entries and Repeater Tip Reference Data | ACCEPTED | Backend · Database · Client | 2026-07-24 |
 | ADR-012 | Plain React + Vite Web Client, Nexus-Shaped (Supersedes ADR-008) | ACCEPTED | Client | 2026-07-24 |
+| ADR-013 | Full Inventory Field Set, Low Usage Reference Value, and Unit-Aware Sign-Off | ACCEPTED | Backend · Database · Client | 2026-07-24 |
 
 **Status values:** PROPOSED | ACCEPTED | DEPRECATED

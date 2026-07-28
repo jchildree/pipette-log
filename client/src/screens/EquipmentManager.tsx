@@ -4,6 +4,17 @@ import type { Balance, Pipette } from '../types';
 import './EquipmentManager.css';
 
 const CATEGORIES = ['single channel', 'multi channel', 'repeater', 'positive displacement'];
+const UNITS = ['uL', 'mL'] as const;
+const STATUSES = ['Active', 'Inactive'];
+const UNIT_FACTOR = { uL: 1, mL: 1000 };
+
+// ADR-013: canonical storage is uL -- the form takes input in the selected unit
+// and converts to uL before it hits the API, same boundary SignOffForm uses.
+function toCanonicalUl(value: string, unit: typeof UNITS[number]): number | undefined {
+    if (!value) return undefined;
+    const n = Number(value);
+    return Number.isNaN(n) ? undefined : n * UNIT_FACTOR[unit];
+}
 
 export default function EquipmentManager() {
     const [pipettes, setPipettes] = useState<Pipette[]>([]);
@@ -19,6 +30,9 @@ export default function EquipmentManager() {
     const [lowUl, setLowUl] = useState('');
     const [midUl, setMidUl] = useState('');
     const [highUl, setHighUl] = useState('');
+    const [lowUsageUl, setLowUsageUl] = useState('');
+    const [unit, setUnit] = useState<typeof UNITS[number]>('uL');
+    const [status, setStatus] = useState(STATUSES[0]);
     const [pipetteError, setPipetteError] = useState<string | null>(null);
     const [pipetteStatus, setPipetteStatus] = useState<string | null>(null);
 
@@ -51,9 +65,12 @@ export default function EquipmentManager() {
                 category,
                 pipette_range: pipetteRange || undefined,
                 calibration_due_date: pipetteCalDate || undefined,
-                low_ul: lowUl ? Number(lowUl) : undefined,
-                mid_ul: midUl ? Number(midUl) : undefined,
-                high_ul: highUl ? Number(highUl) : undefined,
+                low_ul: toCanonicalUl(lowUl, unit),
+                mid_ul: toCanonicalUl(midUl, unit),
+                high_ul: toCanonicalUl(highUl, unit),
+                low_usage_ul: toCanonicalUl(lowUsageUl, unit),
+                unit,
+                status,
             });
             setPipetteStatus(`Added pipette ${pipetteId}.`);
             setPipetteId('');
@@ -62,6 +79,9 @@ export default function EquipmentManager() {
             setLowUl('');
             setMidUl('');
             setHighUl('');
+            setLowUsageUl('');
+            setUnit('uL');
+            setStatus(STATUSES[0]);
             loadEquipment();
         } catch (err) {
             setPipetteError(err instanceof Error ? err.message : 'Failed to add pipette.');
@@ -115,20 +135,34 @@ export default function EquipmentManager() {
                 <input className="input" value={pipetteRange} onChange={(e) => setPipetteRange(e.target.value)} placeholder="e.g. 20-200 uL" />
                 <label className="label">Calibration Due Date</label>
                 <input className="input" value={pipetteCalDate} onChange={(e) => setPipetteCalDate(e.target.value)} placeholder="YYYY-MM-DD" />
+                <label className="label">Unit</label>
+                <select className="input" value={unit} onChange={(e) => setUnit(e.target.value as typeof UNITS[number])}>
+                    {UNITS.map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                    ))}
+                </select>
                 <div className="pointRow">
                     <div className="pointField">
-                        <label className="label">Low (µL)</label>
+                        <label className="label">Low ({unit})</label>
                         <input className="input" value={lowUl} onChange={(e) => setLowUl(e.target.value)} inputMode="decimal" />
                     </div>
                     <div className="pointField">
-                        <label className="label">Mid (µL)</label>
+                        <label className="label">Mid ({unit})</label>
                         <input className="input" value={midUl} onChange={(e) => setMidUl(e.target.value)} inputMode="decimal" />
                     </div>
                     <div className="pointField">
-                        <label className="label">High (µL)</label>
+                        <label className="label">High ({unit})</label>
                         <input className="input" value={highUl} onChange={(e) => setHighUl(e.target.value)} inputMode="decimal" />
                     </div>
                 </div>
+                <label className="label">Low Usage ({unit})</label>
+                <input className="input" value={lowUsageUl} onChange={(e) => setLowUsageUl(e.target.value)} inputMode="decimal" />
+                <label className="label">Status</label>
+                <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                    {STATUSES.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                    ))}
+                </select>
                 {pipetteError && <div className="error">{pipetteError}</div>}
                 {pipetteStatus && <div className="status">{pipetteStatus}</div>}
                 <button type="button" className="submit" onClick={submitPipette}>
@@ -154,6 +188,7 @@ export default function EquipmentManager() {
                 {pipettes.map((p) => (
                     <div key={p.id} className="listRow">
                         {p.equipment_id} -- {p.category ?? 'n/a'} -- {p.pipette_range ?? 'n/a'} -- due {p.calibration_due_date ?? 'n/a'}
+                        -- {p.status ?? 'n/a'} -- {p.manufacturer ?? 'n/a'} -- rack {p.rack_number ?? 'n/a'} -- serial {p.serial_number ?? 'n/a'} -- {p.sub_location ?? 'n/a'} -- {p.department ?? 'n/a'}
                     </div>
                 ))}
             </div>

@@ -42,7 +42,10 @@ router.post('/balances', async (req, res) => {
 });
 
 router.post('/pipettes', async (req, res) => {
-    const { username, pin, equipment_id, category, pipette_range, calibration_due_date, low_ul, mid_ul, high_ul } = req.body;
+    const {
+        username, pin, equipment_id, category, pipette_range, calibration_due_date,
+        low_ul, mid_ul, high_ul, low_usage_ul, unit, status,
+    } = req.body;
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
     if (!equipment_id) return res.status(400).json({ error: 'equipment_id is required' });
@@ -56,16 +59,19 @@ router.post('/pipettes', async (req, res) => {
         .input('lowUl', sql.Decimal(10, 3), low_ul ?? null)
         .input('midUl', sql.Decimal(10, 3), mid_ul ?? null)
         .input('highUl', sql.Decimal(10, 3), high_ul ?? null)
+        .input('lowUsageUl', sql.Decimal(10, 3), low_usage_ul ?? null)
+        .input('unit', sql.NVarChar(4), unit ?? null)
+        .input('status', sql.NVarChar, status ?? null)
         .query(`
-            INSERT INTO equipment (equipment_type, equipment_id, category, pipette_range, calibration_due_date, low_ul, mid_ul, high_ul)
+            INSERT INTO equipment (equipment_type, equipment_id, category, pipette_range, calibration_due_date, low_ul, mid_ul, high_ul, low_usage_ul, unit, status)
             OUTPUT INSERTED.*
-            VALUES ('Pipette', @equipmentId, @category, @pipetteRange, @calibrationDueDate, @lowUl, @midUl, @highUl)
+            VALUES ('Pipette', @equipmentId, @category, @pipetteRange, @calibrationDueDate, @lowUl, @midUl, @highUl, @lowUsageUl, @unit, @status)
         `);
     res.status(201).json(result.recordset[0]);
 });
 
 router.post('/tips', async (req, res) => {
-    const { username, pin, tip_id, low_ul, mid_ul, high_ul } = req.body;
+    const { username, pin, tip_id, low_ul, mid_ul, high_ul, low_usage_ul, unit } = req.body;
     const auth = await checkPin(username, pin);
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
     if (!tip_id) return res.status(400).json({ error: 'tip_id is required' });
@@ -76,7 +82,13 @@ router.post('/tips', async (req, res) => {
         .input('lowUl', sql.Decimal(10, 3), low_ul ?? null)
         .input('midUl', sql.Decimal(10, 3), mid_ul ?? null)
         .input('highUl', sql.Decimal(10, 3), high_ul ?? null)
-        .query('INSERT INTO tips (tip_id, low_ul, mid_ul, high_ul) OUTPUT INSERTED.* VALUES (@tipId, @lowUl, @midUl, @highUl)');
+        .input('lowUsageUl', sql.Decimal(10, 3), low_usage_ul ?? null)
+        .input('unit', sql.NVarChar(4), unit ?? null)
+        .query(`
+            INSERT INTO tips (tip_id, low_ul, mid_ul, high_ul, low_usage_ul, unit)
+            OUTPUT INSERTED.*
+            VALUES (@tipId, @lowUl, @midUl, @highUl, @lowUsageUl, @unit)
+        `);
     res.status(201).json(result.recordset[0]);
 });
 

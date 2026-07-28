@@ -7,5 +7,7 @@ CREATE TABLE tips (
     low_ul      DECIMAL(10,3) NULL,
     mid_ul      DECIMAL(10,3) NULL,
     high_ul     DECIMAL(10,3) NULL,
+    low_usage_ul DECIMAL(10,3) NULL, -- ADR-013: reference-only, not enforced
+    unit        NVARCHAR(4)   NULL, -- ADR-013: 'uL' | 'mL' -- display-only, low/mid/high_ul stay canonical uL
     created_at  DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME()
 );

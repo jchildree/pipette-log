@@ -7,6 +7,8 @@ export interface User {
     username: string;
 }
 
+export type EquipmentUnit = 'uL' | 'mL';
+
 export interface Balance {
     id: number;
     equipment_type: 'Balance';
@@ -14,6 +16,8 @@ export interface Balance {
     calibration_due_date: string | null;
 }
 
+// Fields beyond id/category/range/low-mid-high/unit/status come from the full
+// Joanne's Cleaned Pipette DB import (ADR-013) -- seed-only, no manual edit UI yet.
 export interface Pipette {
     id: number;
     equipment_type: 'Pipette';
@@ -24,6 +28,22 @@ export interface Pipette {
     low_ul: number | null;
     mid_ul: number | null;
     high_ul: number | null;
+    low_usage_ul: number | null;
+    unit: EquipmentUnit | null;
+    status: string | null;
+    rack_number: string | null;
+    serial_number: string | null;
+    sub_location: string | null;
+    last_calibration_date: string | null;
+    mechanism: string | null;
+    calibration_conducted_by: string | null;
+    ranges_used: string | null;
+    department: string | null;
+    manufacturer: string | null;
+    old_id: string | null;
+    review_comment: string | null;
+    adjustment_comment: string | null;
+    comments_2: string | null;
 }
 
 export interface BalancePayload {
@@ -43,6 +63,9 @@ export interface PipettePayload {
     low_ul?: number;
     mid_ul?: number;
     high_ul?: number;
+    low_usage_ul?: number;
+    unit?: EquipmentUnit;
+    status?: string;
 }
 
 export interface MeasurementPoint {
@@ -62,6 +85,8 @@ export interface Tip {
     low_ul: number | null;
     mid_ul: number | null;
     high_ul: number | null;
+    low_usage_ul: number | null;
+    unit: EquipmentUnit | null;
 }
 
 // One multichannel channel's low/mid/high triplet (ADR-011).
