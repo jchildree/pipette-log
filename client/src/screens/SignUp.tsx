@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { signUp } from '../api';
+import './SignUp.css';
 
 export default function SignUp() {
     const [username, setUsername] = useState('');
@@ -31,34 +32,25 @@ export default function SignUp() {
     }
 
     return (
-        <div style={{ padding: 16, maxWidth: 360 }}>
-            <h2>Sign Up</h2>
-            <p>Create a username and 6-digit PIN for signing off entries.</p>
+        <div className="container">
+            <div className="card">
+                <span className="cardTitle">Sign Up</span>
+                <span className="cardHint">Create a username and 6-digit PIN for signing off entries.</span>
 
-            <label>
-                Username
-                <input value={username} onChange={(e) => setUsername(e.target.value)} />
-            </label>
-            <br />
-            <label>
-                PIN
-                <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} />
-            </label>
-            <br />
-            <label>
-                Confirm PIN
-                <input
-                    type="password"
-                    inputMode="numeric"
-                    value={confirmPin}
-                    onChange={(e) => setConfirmPin(e.target.value)}
-                />
-            </label>
-            <br />
-            <button onClick={submit}>Sign Up</button>
+                <label className="label">Username</label>
+                <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" />
 
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-            {status && <p style={{ color: 'green' }}>{status}</p>}
+                <label className="label">PIN</label>
+                <input className="input" type="password" value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric" maxLength={6} />
+
+                <label className="label">Confirm PIN</label>
+                <input className="input" type="password" value={confirmPin} onChange={(e) => setConfirmPin(e.target.value)} inputMode="numeric" maxLength={6} />
+
+                <button className="submit" onClick={submit}>Sign Up</button>
+
+                {error && <div className="error">{error}</div>}
+                {status && <div className="status">{status}</div>}
+            </div>
         </div>
     );
 }
