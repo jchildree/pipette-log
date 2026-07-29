@@ -5,7 +5,7 @@ import { enqueueEntry } from '../storage/queue';
 import { isOnline } from '../network';
 import { NOTE_REQUIRED_TYPES } from '../types';
 import type { Balance, ChannelPoints, EntryPayload, Pipette, PointKey, Tip, User, VerificationType } from '../types';
-import { toDisplay, toCanonical } from '../units';
+import { toCanonical, toDisplay } from '../units';
 import './SignOffForm.css';
 
 const VERIFICATION_TYPES: { value: VerificationType; label: string }[] = [

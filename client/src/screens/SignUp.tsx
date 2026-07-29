@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { signUp } from '../api';
+import { setupUser } from '../api';
 import './SignUp.css';
 
 export default function SignUp() {
@@ -21,7 +21,7 @@ export default function SignUp() {
             return;
         }
         try {
-            await signUp({ username, pin });
+            await setupUser({ username, pin });
             setStatus(`PIN set for ${username}. You can now sign off using it.`);
             setUsername('');
             setPin('');

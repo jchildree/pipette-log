@@ -16,6 +16,8 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const fetchUsers = () => apiFetch<User[]>('/users');
+export const setupUser = (payload: { username: string; pin: string }) =>
+    apiFetch<void>('/users/setup', { method: 'POST', body: JSON.stringify(payload) });
 export const fetchBalances = () => apiFetch<Balance[]>('/balances');
 export const fetchPipettes = () => apiFetch<Pipette[]>('/pipettes');
 export const fetchTips = () => apiFetch<Tip[]>('/tips');
@@ -42,6 +44,3 @@ export const fetchEntries = (filters: AuditListFilters = {}) => {
 };
 
 export const fetchEntryHistory = (id: number) => apiFetch<AuditEntry[]>(`/entries/${id}/history`);
-
-export const signUp = (payload: { username: string; pin: string }) =>
-    apiFetch<void>('/users/setup', { method: 'POST', body: JSON.stringify(payload) });

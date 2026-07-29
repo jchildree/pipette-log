@@ -5,7 +5,7 @@ const referenceRouter = require('./routes/reference');
 const usersRouter = require('./routes/users');
 
 const app = express();
-app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api', entriesRouter);

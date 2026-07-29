@@ -1,8 +1,10 @@
-// ADR-013: canonical storage/calc stay uL/mg everywhere; `unit` only changes what
-// the tech sees/types, converted at this boundary.
-export const UNIT_FACTOR = { uL: 1, mL: 1000 } as const;
+import type { EquipmentUnit } from './types';
 
-export function toDisplay(canonicalUl: string, unit: 'uL' | 'mL'): string {
+// ADR-013: canonical storage/calc stay uL/mg everywhere; `unit` only changes what
+// the tech sees -- converted at this boundary. Shared by SignOffForm and AuditLog.
+export const UNIT_FACTOR: Record<EquipmentUnit, number> = { uL: 1, mL: 1000 };
+
+export function toDisplay(canonicalUl: string, unit: EquipmentUnit): string {
     if (canonicalUl === '') return '';
     const n = Number(canonicalUl);
     if (Number.isNaN(n)) return canonicalUl;
@@ -10,7 +12,7 @@ export function toDisplay(canonicalUl: string, unit: 'uL' | 'mL'): string {
     return factor === 1 ? canonicalUl : String(n / factor);
 }
 
-export function toCanonical(displayValue: string, unit: 'uL' | 'mL'): string {
+export function toCanonical(displayValue: string, unit: EquipmentUnit): string {
     if (displayValue === '') return '';
     const n = Number(displayValue);
     if (Number.isNaN(n)) return displayValue;

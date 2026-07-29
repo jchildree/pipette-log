@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchBalances, fetchEntries, fetchEntryHistory, fetchPipettes } from '../api';
-import type { AuditEntry, Balance, Pipette, PointKey, VerificationType } from '../types';
+import type { AuditEntry, Balance, EquipmentUnit, Pipette, PointKey, VerificationType } from '../types';
 import { toDisplay } from '../units';
 import './AuditLog.css';
 
@@ -16,16 +16,15 @@ const POINTS: { key: PointKey; label: string }[] = [
     { key: 'high', label: 'High' },
 ];
 
-function pointValues(entry: AuditEntry, key: PointKey) {
+function pointValues(entry: AuditEntry, key: PointKey, unit: EquipmentUnit) {
+    const massUnit = unit === 'mL' ? 'g' : 'mg';
     return {
-        volume: entry[`volume_${key}_ul` as const],
-        mass: entry[`mass_${key}_mg` as const],
+        volume: toDisplay(String(entry[`volume_${key}_ul` as const]), unit),
+        mass: toDisplay(String(entry[`mass_${key}_mg` as const]), unit),
+        volumeUnit: unit,
+        massUnit,
         pass: entry[`pass_${key}` as const],
     };
-}
-
-function massUnitLabel(unit: 'uL' | 'mL') {
-    return unit === 'mL' ? 'g' : 'mg';
 }
 
 function PassBadge({ pass }: { pass: 'Y' | 'N' | null }) {
@@ -51,11 +50,6 @@ export default function AuditLog() {
         fetchBalances().then(setBalances).catch(() => {});
     }, []);
 
-    const unitByPipetteId = new Map(pipettes.map((p) => [p.id, p.unit ?? 'uL']));
-    function unitFor(entry: AuditEntry) {
-        return unitByPipetteId.get(entry.pipette_id) ?? 'uL';
-    }
-
     useEffect(() => {
         loadEntries();
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,6 +69,10 @@ export default function AuditLog() {
         } finally {
             setLoading(false);
         }
+    }
+
+    function unitFor(pipetteId: number): EquipmentUnit {
+        return pipettes.find((p) => p.id === pipetteId)?.unit ?? 'uL';
     }
 
     async function openHistory(entry: AuditEntry) {
@@ -127,14 +125,11 @@ export default function AuditLog() {
                     </div>
                     <div className="pointRow">
                         {POINTS.map(({ key, label }) => {
-                            const v = pointValues(entry, key);
-                            const unit = unitFor(entry);
+                            const v = pointValues(entry, key, unitFor(entry.pipette_id));
                             return (
                                 <div className="pointCell" key={key}>
                                     <span className="pointLabel">{label}</span>
-                                    <span className="pointValue">
-                                        {toDisplay(String(v.volume), unit)}{unit} / {toDisplay(String(v.mass), unit)}{massUnitLabel(unit)}
-                                    </span>
+                                    <span className="pointValue">{v.volume}{v.volumeUnit} / {v.mass}{v.massUnit}</span>
                                     <PassBadge pass={v.pass} />
                                 </div>
                             );
@@ -155,11 +150,10 @@ export default function AuditLog() {
                                         {i === 0 ? 'Original' : `Correction ${i}`} (id {h.id}) -- {h.signed_at ? new Date(h.signed_at).toLocaleString() : 'unsigned'}
                                     </div>
                                     {POINTS.map(({ key, label }) => {
-                                        const v = pointValues(h, key);
-                                        const unit = unitFor(h);
+                                        const v = pointValues(h, key, unitFor(h.pipette_id));
                                         return (
                                             <div key={key} className="historyPointLine">
-                                                {label}: {toDisplay(String(v.volume), unit)}{unit} / {toDisplay(String(v.mass), unit)}{massUnitLabel(unit)} &rarr; {v.pass ?? '--'}
+                                                {label}: {v.volume}{v.volumeUnit} / {v.mass}{v.massUnit} &rarr; {v.pass ?? '--'}
                                             </div>
                                         );
                                     })}

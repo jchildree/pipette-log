@@ -2,52 +2,79 @@
 
 Pipette/balance calibration sign-off app. `backend/` is an Express + MSSQL REST API, `client/` is a React + Vite web app. See `CLAUDE.md` for repo layout and `docs/Obsidian Vault/Pipette Log/INDEX.md` for design decisions (ADRs).
 
-## 1. Database (Docker)
+## Quick start (downloaded release build)
+
+If you got this as a zip from a GitHub Release, `client/dist/` is already built -- skip straight to serving it, no `npm install` needed on the client side.
+
+**Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Node.js](https://nodejs.org/) (v18+) installed.
 
 ```bash
-export DB_PASSWORD="<strong-password>"   # PowerShell: $env:DB_PASSWORD = "<strong-password>"
+# 1. Database
+cp .env.example .env   # set DB_PASSWORD to a strong password
+docker compose up -d
+
+# 2. Backend (new terminal)
+cd backend
+cp .env.example .env   # DB_PASSWORD must match the root .env
+npm install
+npm start
+
+# 3. Client (new terminal)
+npx serve -l 8081 client/dist
+```
+
+Open `http://localhost:8081`. `VITE_API_URL` is baked into this build as `http://localhost:3000` -- if your backend runs somewhere else, rebuild from source with a different `client/.env` instead (see [Client](#3-client) below).
+
+## Building from source
+
+### 1. Database (Docker)
+
+```bash
+cp .env.example .env   # set DB_PASSWORD to a strong password
 docker compose up -d
 ```
 
-This starts SQL Server on `localhost:1433` and applies `backend/sqlSchemas/*.sql` in order on first run. Data persists in the `db-data` volume across restarts; to start over, `docker compose down -v`.
+This starts SQL Server, creates the `PipetteLog` database, and applies every schema in `backend/sqlSchemas/` in order. `mssql-init` exits once done; `mssql` keeps running.
 
-## 2. Backend
+### 2. Backend
 
 ```bash
 cd backend
-cp .env.example .env   # fill in DB_PASSWORD with the same value used above
+cp .env.example .env   # DB_PASSWORD must match the one in the root .env
 npm install
-npm start
+npm run dev   # or: npm start
 ```
 
-Runs on `http://localhost:3000`.
-
-## 3. Client
+### 3. Client
 
 ```bash
 cd client
-npm install
-npm run dev
+cp .env.example .env
 ```
 
-Runs on `http://localhost:8081`, talking to the backend at `http://localhost:3000` by default.
-
-### Deploying to a different host
-
-The client reads its API base URL from `VITE_API_URL` at **build time** (`client/src/api.ts`), not at runtime. Before running `npm run build` for a deploy target other than local dev, set it:
+Set `VITE_API_URL` in `client/.env` to the backend's URL for your deploy target (e.g. `http://localhost:3000` for local dev, or the reachable host/port for a hosted test instance). `VITE_API_URL` is baked in at build time, so it must be set before `npm run build` -- changing it later requires a rebuild.
 
 ```bash
-# client/.env
-VITE_API_URL=http://<backend-host>:3000
+npm install
+npm run dev     # local dev server
+# or
+npm run build   # production build, output in client/dist
 ```
 
-Then `npm run build` and serve `client/dist`.
+## Using the app
 
-## 4. First-time sign-off account
+Four tabs across the top:
 
-Open the client, go to the **Sign Up** tab, and create a username/PIN. That PIN is required to sign off entries or add equipment -- there's no default account.
+- **Sign Off** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, choose a verification type, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Signing asks for a technician username + PIN, created via Sign Up below.
+- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history.
+- **Equipment** -- add new pipettes and balances to the reference data (equipment ID, category, calibration due date, low/mid/high targets, etc.). Also requires a technician username + PIN.
+- **Sign Up** -- create a new technician username + PIN. No admin approval needed -- this is what a first-time user does before using Sign Off or Equipment.
 
-## Tests (backend)
+### First login
 
-- `npm test` -- unit tests, no DB required.
-- `npm run test:integration` -- full route lifecycle against the DB from step 1. Requires reference data seeded: at least one row each in `balances` and `pipettes` (see `backend/scripts/seed-equipment.js`).
+Open the client, go to **Sign Up**, create a username/PIN. That account can then sign on to **Sign Off** or **Equipment**.
+
+## Tests
+
+- `cd backend && npm test` -- unit tests, no DB required.
+- `cd backend && npm run test:integration` -- full route lifecycle against the Docker DB above. Requires reference data seeded: at least one row each in `balances` and `pipettes` (see `backend/scripts/seed-equipment.js`).
