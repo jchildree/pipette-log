@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchBalances, fetchEntries, fetchEntryHistory, fetchPipettes } from '../api';
 import type { AuditEntry, Balance, Pipette, PointKey, VerificationType } from '../types';
+import { toDisplay } from '../units';
 import './AuditLog.css';
 
 const VERIFICATION_TYPE_LABELS: Record<VerificationType, string> = {
@@ -21,6 +22,10 @@ function pointValues(entry: AuditEntry, key: PointKey) {
         mass: entry[`mass_${key}_mg` as const],
         pass: entry[`pass_${key}` as const],
     };
+}
+
+function massUnitLabel(unit: 'uL' | 'mL') {
+    return unit === 'mL' ? 'g' : 'mg';
 }
 
 function PassBadge({ pass }: { pass: 'Y' | 'N' | null }) {
@@ -45,6 +50,11 @@ export default function AuditLog() {
         fetchPipettes().then(setPipettes).catch(() => {});
         fetchBalances().then(setBalances).catch(() => {});
     }, []);
+
+    const unitByPipetteId = new Map(pipettes.map((p) => [p.id, p.unit ?? 'uL']));
+    function unitFor(entry: AuditEntry) {
+        return unitByPipetteId.get(entry.pipette_id) ?? 'uL';
+    }
 
     useEffect(() => {
         loadEntries();
@@ -118,10 +128,13 @@ export default function AuditLog() {
                     <div className="pointRow">
                         {POINTS.map(({ key, label }) => {
                             const v = pointValues(entry, key);
+                            const unit = unitFor(entry);
                             return (
                                 <div className="pointCell" key={key}>
                                     <span className="pointLabel">{label}</span>
-                                    <span className="pointValue">{v.volume}µL / {v.mass}mg</span>
+                                    <span className="pointValue">
+                                        {toDisplay(String(v.volume), unit)}{unit} / {toDisplay(String(v.mass), unit)}{massUnitLabel(unit)}
+                                    </span>
                                     <PassBadge pass={v.pass} />
                                 </div>
                             );
@@ -143,9 +156,10 @@ export default function AuditLog() {
                                     </div>
                                     {POINTS.map(({ key, label }) => {
                                         const v = pointValues(h, key);
+                                        const unit = unitFor(h);
                                         return (
                                             <div key={key} className="historyPointLine">
-                                                {label}: {v.volume}µL / {v.mass}mg &rarr; {v.pass ?? '--'}
+                                                {label}: {toDisplay(String(v.volume), unit)}{unit} / {toDisplay(String(v.mass), unit)}{massUnitLabel(unit)} &rarr; {v.pass ?? '--'}
                                             </div>
                                         );
                                     })}

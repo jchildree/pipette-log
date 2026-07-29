@@ -1,0 +1,37 @@
+services:
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${DB_PASSWORD}"
+    ports:
+      - "1433:1433"
+    volumes:
+      - db-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MSSQL_SA_PASSWORD: "${DB_PASSWORD}"
+    volumes:
+      - ./backend/sqlSchemas:/sqlSchemas:ro
+    entrypoint: >
+      bash -c '
+      set -e;
+      SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S db -U sa -P \"$$MSSQL_SA_PASSWORD\" -C";
+      $$SQLCMD -Q "IF DB_ID(\"PipetteLog\") IS NULL CREATE DATABASE PipetteLog;";
+      for f in 001_users.sql 002_equipment.sql 003_entries.sql 004_entry_point_attempts.sql 005_tips.sql 006_entry_channel_points.sql; do
+        $$SQLCMD -d PipetteLog -i "/sqlSchemas/$$f";
+      done
+      '
+
+volumes:
+  db-data:

@@ -42,3 +42,6 @@ export const fetchEntries = (filters: AuditListFilters = {}) => {
 };
 
 export const fetchEntryHistory = (id: number) => apiFetch<AuditEntry[]>(`/entries/${id}/history`);
+
+export const signUp = (payload: { username: string; pin: string }) =>
+    apiFetch<void>('/users/setup', { method: 'POST', body: JSON.stringify(payload) });
