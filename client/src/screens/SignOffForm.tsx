@@ -230,6 +230,7 @@ export default function SignOffForm() {
                 return next;
             });
             if (failedLabels.length > 0) {
+                setSignOffVisible(false);
                 toast.error(`${failedLabels.join(', ')} out of tolerance -- re-enter and try again, or accept a prior attempt below.`);
                 return;
             }

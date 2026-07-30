@@ -10,6 +10,7 @@ export interface FullUser {
     id: number;
     username: string;
     is_admin: boolean;
+    is_active: boolean;
     failed_attempts: number;
     locked_until: string | null;
     created_at: string;

@@ -75,6 +75,16 @@ export default function UsersManager() {
         }
     }
 
+    async function toggleActive(user: FullUser) {
+        try {
+            await updateUser(user.id, { admin_username: adminUsername, admin_pin: adminPin, is_active: !user.is_active });
+            toast.success(`${user.username} ${user.is_active ? 'deactivated' : 'reactivated'}.`);
+            loadUsers();
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Update failed.');
+        }
+    }
+
     const totalPages = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
     const pagedUsers = users.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
@@ -120,16 +130,20 @@ export default function UsersManager() {
                             <tbody>
                                 {pagedUsers.map((u) => {
                                     const locked = !!u.locked_until && new Date(u.locked_until) > new Date();
+                                    const statusLabel = !u.is_active ? 'Deactivated' : locked ? 'Locked' : 'Active';
                                     return (
                                         <Fragment key={u.id}>
                                             <tr className="eqRow" onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}>
                                                 <td>{u.username}</td>
                                                 <td>{u.is_admin ? 'Yes' : 'No'}</td>
-                                                <td>{locked ? 'Locked' : 'Active'}</td>
+                                                <td>{statusLabel}</td>
                                                 <td>{new Date(u.created_at).toLocaleDateString()}</td>
                                                 <td>
                                                     <button type="button" className="rowAction" onClick={(e) => { e.stopPropagation(); toggleAdmin(u); }}>
                                                         {u.is_admin ? 'Demote' : 'Promote'}
+                                                    </button>
+                                                    <button type="button" className="rowAction" onClick={(e) => { e.stopPropagation(); toggleActive(u); }}>
+                                                        {u.is_active ? 'Deactivate' : 'Reactivate'}
                                                     </button>
                                                     {locked && (
                                                         <button type="button" className="rowAction" onClick={(e) => { e.stopPropagation(); unlock(u); }}>

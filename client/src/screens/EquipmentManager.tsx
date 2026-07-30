@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { addBalance, addPipette, fetchBalances, fetchPipettes, fetchUsers } from '../api';
 import { useAdminSession } from '../admin/AdminSession';
 import { useToast } from '../toast/ToastProvider';
+import { deriveRangeTargets } from '../rangeParse';
 import type { Balance, EquipmentUnit, Pipette, User } from '../types';
 import './EquipmentManager.css';
 
@@ -56,6 +57,16 @@ export default function EquipmentManager() {
     const [lowUsageUl, setLowUsageUl] = useState('');
     const [unit, setUnit] = useState<EquipmentUnit>('uL');
     const [status, setStatus] = useState(STATUSES[0]);
+
+    // Auto-fill Low/Mid/High from the typed range (stakeholder rule, see
+    // rangeParse.ts) -- still freely editable afterward.
+    function updatePipetteRange(value: string) {
+        setPipetteRange(value);
+        const targets = deriveRangeTargets(value);
+        setLowUl(targets.low != null ? String(targets.low / UNIT_FACTOR[unit]) : '');
+        setMidUl(targets.mid != null ? String(targets.mid / UNIT_FACTOR[unit]) : '');
+        setHighUl(targets.high != null ? String(targets.high / UNIT_FACTOR[unit]) : '');
+    }
 
     const [balanceId, setBalanceId] = useState('');
     const [balanceCalDate, setBalanceCalDate] = useState('');
@@ -277,7 +288,7 @@ export default function EquipmentManager() {
                                     </select>
                                 </Field>
                                 <Field label="Pipette Range">
-                                    <input className="input" value={pipetteRange} onChange={(e) => setPipetteRange(e.target.value)} placeholder="e.g. 20-200 uL" />
+                                    <input className="input" value={pipetteRange} onChange={(e) => updatePipetteRange(e.target.value)} placeholder="e.g. 20-200 uL" />
                                 </Field>
                                 <Field label="Calibration Due Date">
                                     <input className="input" value={pipetteCalDate} onChange={(e) => setPipetteCalDate(e.target.value)} placeholder="YYYY-MM-DD" />

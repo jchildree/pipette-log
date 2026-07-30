@@ -22,7 +22,7 @@ export const setupUser = (payload: { username: string; pin: string; is_admin?: b
 export const fetchAllUsers = (creds: AdminCredentials) =>
     apiFetch<FullUser[]>('/users/list', { method: 'POST', body: JSON.stringify(creds) });
 
-export const updateUser = (id: number, payload: { is_admin?: boolean; unlock?: boolean } & AdminCredentials) =>
+export const updateUser = (id: number, payload: { is_admin?: boolean; is_active?: boolean; unlock?: boolean } & AdminCredentials) =>
     apiFetch<FullUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const fetchBalances = () => apiFetch<Balance[]>('/balances');
 export const fetchPipettes = () => apiFetch<Pipette[]>('/pipettes');

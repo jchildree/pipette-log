@@ -13,10 +13,12 @@ async function checkPin(username, pin) {
     const pool = await getPool();
     const result = await pool.request()
         .input('username', sql.NVarChar, username)
-        .query('SELECT id, pin_hash, failed_attempts, locked_until, is_admin FROM users WHERE username = @username');
+        .query('SELECT id, pin_hash, failed_attempts, locked_until, is_admin, is_active FROM users WHERE username = @username');
 
     const user = result.recordset[0];
     if (!user || !user.pin_hash) return { ok: false, reason: 'invalid_credentials' };
+
+    if (!user.is_active) return { ok: false, reason: 'deactivated' };
 
     if (user.locked_until && new Date(user.locked_until) > new Date()) {
         return { ok: false, reason: 'locked' };

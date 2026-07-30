@@ -19,7 +19,7 @@ router.post('/users/list', async (req, res) => {
 
     const pool = await getPool();
     const result = await pool.request()
-        .query('SELECT id, username, is_admin, failed_attempts, locked_until, created_at FROM users ORDER BY username');
+        .query('SELECT id, username, is_admin, is_active, failed_attempts, locked_until, created_at FROM users ORDER BY username');
     res.json(result.recordset);
 });
 
@@ -50,10 +50,10 @@ router.post('/users/setup', async (req, res) => {
     res.status(204).send();
 });
 
-// Admin-only: promote/demote, or clear a lockout.
+// Admin-only: promote/demote, activate/deactivate, or clear a lockout.
 router.patch('/users/:id', async (req, res) => {
     const { id } = req.params;
-    const { admin_username, admin_pin, is_admin, unlock } = req.body;
+    const { admin_username, admin_pin, is_admin, is_active, unlock } = req.body;
     const auth = await checkAdminPin(admin_username, admin_pin);
     if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
 
@@ -64,6 +64,12 @@ router.patch('/users/:id', async (req, res) => {
             .input('isAdmin', sql.Bit, is_admin ? 1 : 0)
             .query('UPDATE users SET is_admin = @isAdmin WHERE id = @id');
     }
+    if (is_active !== undefined) {
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('isActive', sql.Bit, is_active ? 1 : 0)
+            .query('UPDATE users SET is_active = @isActive WHERE id = @id');
+    }
     if (unlock) {
         await pool.request()
             .input('id', sql.Int, id)
@@ -72,7 +78,7 @@ router.patch('/users/:id', async (req, res) => {
 
     const result = await pool.request()
         .input('id', sql.Int, id)
-        .query('SELECT id, username, is_admin, failed_attempts, locked_until, created_at FROM users WHERE id = @id');
+        .query('SELECT id, username, is_admin, is_active, failed_attempts, locked_until, created_at FROM users WHERE id = @id');
     res.json(result.recordset[0]);
 });
 
