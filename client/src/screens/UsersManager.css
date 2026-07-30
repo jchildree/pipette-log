@@ -1,0 +1,23 @@
+.container { padding: 16px; display: flex; flex-direction: column; gap: 12px; max-width: 900px; margin: 0 auto; }
+.card { background: var(--brand-light); border: 1px solid var(--brand-border); border-radius: 8px; padding: 16px; max-width: 360px; }
+.cardTitle { font-weight: 700; font-size: 18px; margin-bottom: 4px; display: block; }
+.cardHint { color: #555; font-size: 13px; }
+.label { font-weight: 600; margin-top: 12px; display: block; }
+.input { border: 1px solid #ccc; border-radius: 6px; padding: 8px; margin-top: 4px; width: 100%; background: #fff; }
+.checkboxRow { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-weight: 600; font-size: 14px; }
+.submit { margin-top: 16px; text-align: center; background: #2563eb; color: #fff; padding: 12px; border-radius: 8px; font-weight: 600; border: none; width: 100%; cursor: pointer; font-size: 1rem; }
+
+.listCard { background: #fff; border: 1px solid var(--brand-border); border-radius: 8px; padding: 12px; }
+.tableScroll { overflow-x: auto; }
+.eqTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.eqTable th { text-align: left; background: var(--brand-blue); color: #fff; padding: 8px 10px; font-weight: 700; white-space: nowrap; }
+.eqTable td { padding: 8px 10px; border-top: 1px solid #eee; }
+.eqRow { cursor: pointer; }
+.eqRow:hover { background: var(--brand-light); }
+.eqDetailRow td { background: #f8fafc; }
+.eqDetailGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 16px; padding: 8px 4px; font-size: 12px; color: #333; }
+.rowAction { border: 1px solid var(--brand-border); background: #fff; border-radius: 6px; padding: 4px 8px; margin-right: 6px; cursor: pointer; font-size: 12px; }
+
+.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 10px; font-size: 13px; }
+.pager button { border: 1px solid var(--brand-border); background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+.pager button:disabled { opacity: 0.4; cursor: default; }

@@ -1,6 +1,6 @@
 const express = require('express');
 const { sql, getPool } = require('../lib/db');
-const { checkPin } = require('../lib/auth');
+const { checkAdminPin } = require('../lib/auth');
 
 const router = express.Router();
 
@@ -29,8 +29,8 @@ router.get('/tips', async (req, res) => {
 // than leaving these writes unauthenticated.
 router.post('/balances', async (req, res) => {
     const { username, pin, equipment_id, calibration_due_date } = req.body;
-    const auth = await checkPin(username, pin);
-    if (!auth.ok) return res.status(401).json({ error: auth.reason });
+    const auth = await checkAdminPin(username, pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
     if (!equipment_id) return res.status(400).json({ error: 'equipment_id is required' });
 
     const pool = await getPool();
@@ -46,8 +46,8 @@ router.post('/pipettes', async (req, res) => {
         username, pin, equipment_id, category, pipette_range, calibration_due_date,
         low_ul, mid_ul, high_ul, low_usage_ul, unit, status,
     } = req.body;
-    const auth = await checkPin(username, pin);
-    if (!auth.ok) return res.status(401).json({ error: auth.reason });
+    const auth = await checkAdminPin(username, pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
     if (!equipment_id) return res.status(400).json({ error: 'equipment_id is required' });
 
     const pool = await getPool();
@@ -72,8 +72,8 @@ router.post('/pipettes', async (req, res) => {
 
 router.post('/tips', async (req, res) => {
     const { username, pin, tip_id, low_ul, mid_ul, high_ul, low_usage_ul, unit } = req.body;
-    const auth = await checkPin(username, pin);
-    if (!auth.ok) return res.status(401).json({ error: auth.reason });
+    const auth = await checkAdminPin(username, pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
     if (!tip_id) return res.status(400).json({ error: 'tip_id is required' });
 
     const pool = await getPool();

@@ -1,27 +1,50 @@
-import { useEffect, useState } from 'react';
-import { addBalance, addPipette, fetchBalances, fetchPipettes } from '../api';
-import type { Balance, Pipette } from '../types';
+import { Fragment, useEffect, useState } from 'react';
+import { addBalance, addPipette, fetchBalances, fetchPipettes, fetchUsers } from '../api';
+import { useAdminSession } from '../admin/AdminSession';
+import { useToast } from '../toast/ToastProvider';
+import type { Balance, EquipmentUnit, Pipette, User } from '../types';
 import './EquipmentManager.css';
 
 const CATEGORIES = ['single channel', 'multi channel', 'repeater', 'positive displacement'];
-const UNITS = ['uL', 'mL'] as const;
+const UNITS: EquipmentUnit[] = ['uL', 'mL'];
 const STATUSES = ['Active', 'Inactive'];
-const UNIT_FACTOR = { uL: 1, mL: 1000 };
+const UNIT_FACTOR: Record<EquipmentUnit, number> = { uL: 1, mL: 1000 };
+const PAGE_SIZE = 100;
+
+type EquipmentType = 'Pipette' | 'Balance';
 
 // ADR-013: canonical storage is uL -- the form takes input in the selected unit
 // and converts to uL before it hits the API, same boundary SignOffForm uses.
-function toCanonicalUl(value: string, unit: typeof UNITS[number]): number | undefined {
+function toCanonicalUl(value: string, unit: EquipmentUnit): number | undefined {
     if (!value) return undefined;
     const n = Number(value);
     return Number.isNaN(n) ? undefined : n * UNIT_FACTOR[unit];
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+    return (
+        <div>
+            <label className="label">{label}</label>
+            {children}
+        </div>
+    );
+}
+
 export default function EquipmentManager() {
+    const { isAdmin, username: adminUsername, pin: adminPin } = useAdminSession();
+    const toast = useToast();
+
     const [pipettes, setPipettes] = useState<Pipette[]>([]);
     const [balances, setBalances] = useState<Balance[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
 
-    const [username, setUsername] = useState('');
-    const [pin, setPin] = useState('');
+    const [pipettePage, setPipettePage] = useState(0);
+    const [balancePage, setBalancePage] = useState(0);
+    const [expandedPipetteId, setExpandedPipetteId] = useState<number | null>(null);
+    const [expandedBalanceId, setExpandedBalanceId] = useState<number | null>(null);
+
+    const [addModalOpen, setAddModalOpen] = useState(false);
+    const [addType, setAddType] = useState<EquipmentType>('Pipette');
 
     const [pipetteId, setPipetteId] = useState('');
     const [category, setCategory] = useState(CATEGORIES[0]);
@@ -31,18 +54,19 @@ export default function EquipmentManager() {
     const [midUl, setMidUl] = useState('');
     const [highUl, setHighUl] = useState('');
     const [lowUsageUl, setLowUsageUl] = useState('');
-    const [unit, setUnit] = useState<typeof UNITS[number]>('uL');
+    const [unit, setUnit] = useState<EquipmentUnit>('uL');
     const [status, setStatus] = useState(STATUSES[0]);
-    const [pipetteError, setPipetteError] = useState<string | null>(null);
-    const [pipetteStatus, setPipetteStatus] = useState<string | null>(null);
 
     const [balanceId, setBalanceId] = useState('');
     const [balanceCalDate, setBalanceCalDate] = useState('');
-    const [balanceError, setBalanceError] = useState<string | null>(null);
-    const [balanceStatus, setBalanceStatus] = useState<string | null>(null);
+
+    const [signOffVisible, setSignOffVisible] = useState(false);
+    const [username, setUsername] = useState('');
+    const [pin, setPin] = useState('');
 
     useEffect(() => {
         loadEquipment();
+        fetchUsers().then(setUsers).catch(() => {});
     }, []);
 
     function loadEquipment() {
@@ -50,157 +74,285 @@ export default function EquipmentManager() {
         fetchBalances().then(setBalances).catch(() => {});
     }
 
-    async function submitPipette() {
-        setPipetteError(null);
-        setPipetteStatus(null);
-        if (!username || !pin || !pipetteId) {
-            setPipetteError('Technician, PIN, and Pipette ID are required.');
+    function resetAddForm() {
+        setPipetteId('');
+        setCategory(CATEGORIES[0]);
+        setPipetteRange('');
+        setPipetteCalDate('');
+        setLowUl('');
+        setMidUl('');
+        setHighUl('');
+        setLowUsageUl('');
+        setUnit('uL');
+        setStatus(STATUSES[0]);
+        setBalanceId('');
+        setBalanceCalDate('');
+    }
+
+    function openAddModal() {
+        if (!isAdmin) {
+            toast.error('Admin login required to add equipment.');
+            return;
+        }
+        resetAddForm();
+        setAddType('Pipette');
+        setAddModalOpen(true);
+    }
+
+    function continueToSignOff() {
+        if (addType === 'Pipette' && !pipetteId) {
+            toast.error('Pipette ID is required.');
+            return;
+        }
+        if (addType === 'Balance' && !balanceId) {
+            toast.error('Balance ID is required.');
+            return;
+        }
+        setUsername(adminUsername);
+        setPin(adminPin);
+        setAddModalOpen(false);
+        setSignOffVisible(true);
+    }
+
+    async function confirmSignOff() {
+        if (!username || !pin) {
+            toast.error('Technician and PIN are required.');
             return;
         }
         try {
-            await addPipette({
-                username,
-                pin,
-                equipment_id: pipetteId,
-                category,
-                pipette_range: pipetteRange || undefined,
-                calibration_due_date: pipetteCalDate || undefined,
-                low_ul: toCanonicalUl(lowUl, unit),
-                mid_ul: toCanonicalUl(midUl, unit),
-                high_ul: toCanonicalUl(highUl, unit),
-                low_usage_ul: toCanonicalUl(lowUsageUl, unit),
-                unit,
-                status,
-            });
-            setPipetteStatus(`Added pipette ${pipetteId}.`);
-            setPipetteId('');
-            setPipetteRange('');
-            setPipetteCalDate('');
-            setLowUl('');
-            setMidUl('');
-            setHighUl('');
-            setLowUsageUl('');
-            setUnit('uL');
-            setStatus(STATUSES[0]);
+            if (addType === 'Pipette') {
+                await addPipette({
+                    username, pin, equipment_id: pipetteId, category,
+                    pipette_range: pipetteRange || undefined,
+                    calibration_due_date: pipetteCalDate || undefined,
+                    low_ul: toCanonicalUl(lowUl, unit),
+                    mid_ul: toCanonicalUl(midUl, unit),
+                    high_ul: toCanonicalUl(highUl, unit),
+                    low_usage_ul: toCanonicalUl(lowUsageUl, unit),
+                    unit, status,
+                });
+                toast.success(`Added pipette ${pipetteId}.`);
+            } else {
+                await addBalance({
+                    username, pin, equipment_id: balanceId,
+                    calibration_due_date: balanceCalDate || undefined,
+                });
+                toast.success(`Added balance ${balanceId}.`);
+            }
+            setSignOffVisible(false);
+            resetAddForm();
             loadEquipment();
         } catch (err) {
-            setPipetteError(err instanceof Error ? err.message : 'Failed to add pipette.');
+            toast.error(err instanceof Error ? err.message : 'Failed to add equipment.');
         }
     }
 
-    async function submitBalance() {
-        setBalanceError(null);
-        setBalanceStatus(null);
-        if (!username || !pin || !balanceId) {
-            setBalanceError('Technician, PIN, and Balance ID are required.');
-            return;
-        }
-        try {
-            await addBalance({
-                username,
-                pin,
-                equipment_id: balanceId,
-                calibration_due_date: balanceCalDate || undefined,
-            });
-            setBalanceStatus(`Added balance ${balanceId}.`);
-            setBalanceId('');
-            setBalanceCalDate('');
-            loadEquipment();
-        } catch (err) {
-            setBalanceError(err instanceof Error ? err.message : 'Failed to add balance.');
-        }
-    }
+    const pipetteTotalPages = Math.max(1, Math.ceil(pipettes.length / PAGE_SIZE));
+    const balanceTotalPages = Math.max(1, Math.ceil(balances.length / PAGE_SIZE));
+    const pagedPipettes = pipettes.slice(pipettePage * PAGE_SIZE, pipettePage * PAGE_SIZE + PAGE_SIZE);
+    const pagedBalances = balances.slice(balancePage * PAGE_SIZE, balancePage * PAGE_SIZE + PAGE_SIZE);
 
     return (
         <div className="container">
-            <div className="card">
-                <span className="cardTitle">Technician Sign-Off</span>
-                <label className="label">Technician</label>
-                <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" />
-                <label className="label">PIN</label>
-                <input className="input" type="password" value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric" maxLength={6} />
-            </div>
-
-            <div className="card">
-                <span className="cardTitle">Add Pipette</span>
-                <label className="label">Pipette ID</label>
-                <input className="input" value={pipetteId} onChange={(e) => setPipetteId(e.target.value)} placeholder="e.g. PI-099" />
-                <label className="label">Category</label>
-                <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
-                    {CATEGORIES.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                    ))}
-                </select>
-                <label className="label">Pipette Range</label>
-                <input className="input" value={pipetteRange} onChange={(e) => setPipetteRange(e.target.value)} placeholder="e.g. 20-200 uL" />
-                <label className="label">Calibration Due Date</label>
-                <input className="input" value={pipetteCalDate} onChange={(e) => setPipetteCalDate(e.target.value)} placeholder="YYYY-MM-DD" />
-                <label className="label">Unit</label>
-                <select className="input" value={unit} onChange={(e) => setUnit(e.target.value as typeof UNITS[number])}>
-                    {UNITS.map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                    ))}
-                </select>
-                <div className="pointRow">
-                    <div className="pointField">
-                        <label className="label">Low ({unit})</label>
-                        <input className="input" value={lowUl} onChange={(e) => setLowUl(e.target.value)} inputMode="decimal" />
-                    </div>
-                    <div className="pointField">
-                        <label className="label">Mid ({unit})</label>
-                        <input className="input" value={midUl} onChange={(e) => setMidUl(e.target.value)} inputMode="decimal" />
-                    </div>
-                    <div className="pointField">
-                        <label className="label">High ({unit})</label>
-                        <input className="input" value={highUl} onChange={(e) => setHighUl(e.target.value)} inputMode="decimal" />
-                    </div>
-                </div>
-                <label className="label">Low Usage ({unit})</label>
-                <input className="input" value={lowUsageUl} onChange={(e) => setLowUsageUl(e.target.value)} inputMode="decimal" />
-                <label className="label">Status</label>
-                <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
-                    {STATUSES.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                    ))}
-                </select>
-                {pipetteError && <div className="error">{pipetteError}</div>}
-                {pipetteStatus && <div className="status">{pipetteStatus}</div>}
-                <button type="button" className="submit" onClick={submitPipette}>
-                    Add Pipette
-                </button>
-            </div>
-
-            <div className="card">
-                <span className="cardTitle">Add Balance</span>
-                <label className="label">Balance ID</label>
-                <input className="input" value={balanceId} onChange={(e) => setBalanceId(e.target.value)} placeholder="e.g. BAL-020" />
-                <label className="label">Calibration Due Date</label>
-                <input className="input" value={balanceCalDate} onChange={(e) => setBalanceCalDate(e.target.value)} placeholder="YYYY-MM-DD" />
-                {balanceError && <div className="error">{balanceError}</div>}
-                {balanceStatus && <div className="status">{balanceStatus}</div>}
-                <button type="button" className="submit" onClick={submitBalance}>
-                    Add Balance
-                </button>
+            <div className="headerRow">
+                <span className="title">Equipment</span>
+                {isAdmin ? (
+                    <button type="button" className="addButton" onClick={openAddModal}>+ Add Equipment</button>
+                ) : (
+                    <span className="adminNote">Admin login required to add equipment</span>
+                )}
             </div>
 
             <div className="listCard">
                 <span className="cardTitle">Pipettes ({pipettes.length})</span>
-                {pipettes.map((p) => (
-                    <div key={p.id} className="listRow">
-                        {p.equipment_id} -- {p.category ?? 'n/a'} -- {p.pipette_range ?? 'n/a'} -- due {p.calibration_due_date ?? 'n/a'}
-                        -- {p.status ?? 'n/a'} -- {p.manufacturer ?? 'n/a'} -- rack {p.rack_number ?? 'n/a'} -- serial {p.serial_number ?? 'n/a'} -- {p.sub_location ?? 'n/a'} -- {p.department ?? 'n/a'}
+                <div className="tableScroll">
+                    <table className="eqTable">
+                        <thead>
+                            <tr>
+                                <th>Equipment ID</th>
+                                <th>Category</th>
+                                <th>Range</th>
+                                <th>Due Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {pagedPipettes.map((p) => (
+                                <Fragment key={p.id}>
+                                    <tr className="eqRow" onClick={() => setExpandedPipetteId(expandedPipetteId === p.id ? null : p.id)}>
+                                        <td>{p.equipment_id}</td>
+                                        <td>{p.category ?? 'n/a'}</td>
+                                        <td>{p.pipette_range ?? 'n/a'}</td>
+                                        <td>{p.calibration_due_date ?? 'n/a'}</td>
+                                        <td>{p.status ?? 'n/a'}</td>
+                                    </tr>
+                                    {expandedPipetteId === p.id && (
+                                        <tr className="eqDetailRow">
+                                            <td colSpan={5}>
+                                                <div className="eqDetailGrid">
+                                                    <span>Low/Mid/High: {p.low_ul ?? 'n/a'} / {p.mid_ul ?? 'n/a'} / {p.high_ul ?? 'n/a'} {p.unit ?? 'uL'}</span>
+                                                    <span>Low Usage: {p.low_usage_ul ?? 'n/a'} {p.unit ?? 'uL'}</span>
+                                                    <span>Rack: {p.rack_number ?? 'n/a'}</span>
+                                                    <span>Serial: {p.serial_number ?? 'n/a'}</span>
+                                                    <span>Sub Location: {p.sub_location ?? 'n/a'}</span>
+                                                    <span>Department: {p.department ?? 'n/a'}</span>
+                                                    <span>Manufacturer: {p.manufacturer ?? 'n/a'}</span>
+                                                    <span>Mechanism: {p.mechanism ?? 'n/a'}</span>
+                                                    <span>Last Calibration: {p.last_calibration_date ?? 'n/a'}</span>
+                                                    <span>Calibration Conducted By: {p.calibration_conducted_by ?? 'n/a'}</span>
+                                                    <span>Ranges Used: {p.ranges_used ?? 'n/a'}</span>
+                                                    <span>Old ID: {p.old_id ?? 'n/a'}</span>
+                                                    {p.review_comment && <span>Review: {p.review_comment}</span>}
+                                                    {p.adjustment_comment && <span>Adjustment: {p.adjustment_comment}</span>}
+                                                    {p.comments_2 && <span>Comments: {p.comments_2}</span>}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                {pipetteTotalPages > 1 && (
+                    <div className="pager">
+                        <button type="button" disabled={pipettePage === 0} onClick={() => setPipettePage((p) => p - 1)}>Prev</button>
+                        <span>Page {pipettePage + 1} of {pipetteTotalPages}</span>
+                        <button type="button" disabled={pipettePage >= pipetteTotalPages - 1} onClick={() => setPipettePage((p) => p + 1)}>Next</button>
                     </div>
-                ))}
+                )}
             </div>
 
             <div className="listCard">
                 <span className="cardTitle">Balances ({balances.length})</span>
-                {balances.map((b) => (
-                    <div key={b.id} className="listRow">
-                        {b.equipment_id} -- due {b.calibration_due_date ?? 'n/a'}
+                <div className="tableScroll">
+                    <table className="eqTable">
+                        <thead>
+                            <tr>
+                                <th>Equipment ID</th>
+                                <th>Due Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {pagedBalances.map((b) => (
+                                <tr key={b.id} className="eqRow" onClick={() => setExpandedBalanceId(expandedBalanceId === b.id ? null : b.id)}>
+                                    <td>{b.equipment_id}</td>
+                                    <td>{b.calibration_due_date ?? 'n/a'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                {balanceTotalPages > 1 && (
+                    <div className="pager">
+                        <button type="button" disabled={balancePage === 0} onClick={() => setBalancePage((p) => p - 1)}>Prev</button>
+                        <span>Page {balancePage + 1} of {balanceTotalPages}</span>
+                        <button type="button" disabled={balancePage >= balanceTotalPages - 1} onClick={() => setBalancePage((p) => p + 1)}>Next</button>
                     </div>
-                ))}
+                )}
             </div>
+
+            {addModalOpen && (
+                <div className="modalBackdrop" onClick={() => setAddModalOpen(false)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Add Equipment</div>
+
+                        <Field label="Equipment Type">
+                            <select className="input" value={addType} onChange={(e) => setAddType(e.target.value as EquipmentType)}>
+                                <option value="Pipette">Pipette</option>
+                                <option value="Balance">Balance</option>
+                            </select>
+                        </Field>
+
+                        {addType === 'Pipette' ? (
+                            <>
+                                <Field label="Pipette ID">
+                                    <input className="input" value={pipetteId} onChange={(e) => setPipetteId(e.target.value)} placeholder="e.g. PI-099" />
+                                </Field>
+                                <Field label="Category">
+                                    <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+                                        {CATEGORIES.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                                <Field label="Pipette Range">
+                                    <input className="input" value={pipetteRange} onChange={(e) => setPipetteRange(e.target.value)} placeholder="e.g. 20-200 uL" />
+                                </Field>
+                                <Field label="Calibration Due Date">
+                                    <input className="input" value={pipetteCalDate} onChange={(e) => setPipetteCalDate(e.target.value)} placeholder="YYYY-MM-DD" />
+                                </Field>
+                                <Field label="Unit">
+                                    <select className="input" value={unit} onChange={(e) => setUnit(e.target.value as EquipmentUnit)}>
+                                        {UNITS.map((u) => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                                <div className="pointRow">
+                                    <div className="pointField">
+                                        <label className="label">Low ({unit})</label>
+                                        <input className="input" value={lowUl} onChange={(e) => setLowUl(e.target.value)} inputMode="decimal" />
+                                    </div>
+                                    <div className="pointField">
+                                        <label className="label">Mid ({unit})</label>
+                                        <input className="input" value={midUl} onChange={(e) => setMidUl(e.target.value)} inputMode="decimal" />
+                                    </div>
+                                    <div className="pointField">
+                                        <label className="label">High ({unit})</label>
+                                        <input className="input" value={highUl} onChange={(e) => setHighUl(e.target.value)} inputMode="decimal" />
+                                    </div>
+                                </div>
+                                <Field label={`Low Usage (${unit})`}>
+                                    <input className="input" value={lowUsageUl} onChange={(e) => setLowUsageUl(e.target.value)} inputMode="decimal" />
+                                </Field>
+                                <Field label="Status">
+                                    <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                                        {STATUSES.map((s) => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+                            </>
+                        ) : (
+                            <>
+                                <Field label="Balance ID">
+                                    <input className="input" value={balanceId} onChange={(e) => setBalanceId(e.target.value)} placeholder="e.g. BAL-020" />
+                                </Field>
+                                <Field label="Calibration Due Date">
+                                    <input className="input" value={balanceCalDate} onChange={(e) => setBalanceCalDate(e.target.value)} placeholder="YYYY-MM-DD" />
+                                </Field>
+                            </>
+                        )}
+
+                        <button type="button" className="submit" onClick={continueToSignOff}>Continue to Sign-Off</button>
+                        <button type="button" className="cancel" onClick={() => setAddModalOpen(false)}>Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            {signOffVisible && (
+                <div className="modalBackdrop" onClick={() => setSignOffVisible(false)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Technician Sign-Off</div>
+
+                        <Field label="Technician">
+                            <select className="input" value={username} onChange={(e) => setUsername(e.target.value)}>
+                                <option value="">Select...</option>
+                                {users.map((u) => (
+                                    <option key={u.id} value={u.username}>{u.username}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="PIN">
+                            <input className="input" type="password" value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric" maxLength={6} />
+                        </Field>
+
+                        <button type="button" className="submit" onClick={confirmSignOff}>Confirm &amp; Sign</button>
+                        <button type="button" className="cancel" onClick={() => { setSignOffVisible(false); setAddModalOpen(true); }}>Back</button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

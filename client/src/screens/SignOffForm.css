@@ -18,12 +18,11 @@
 .cardMeta { margin-top: 8px; border-top: 1px solid var(--brand-border); padding-top: 8px; }
 .cardMetaLine { font-size: 12px; color: #1a4d5c; }
 
-.radioRow { display: flex; align-items: center; padding: 4px 0; cursor: pointer; }
-.radioOuter { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--brand-blue); display: flex; align-items: center; justify-content: center; margin-right: 8px; flex-shrink: 0; }
-.radioInner { width: 10px; height: 10px; border-radius: 50%; background: var(--brand-blue); }
-.checkboxOuter { border-radius: 3px; }
-.checkboxInner { border-radius: 1px; width: 10px; height: 10px; }
-.checkboxDivider { border-top: 1px solid var(--brand-border); margin: 8px 0; }
+.verificationCard { background: var(--brand-light); border-color: var(--brand-blue); }
+.checkboxRow { display: flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; }
+.cardHint { display: block; margin-top: 6px; font-size: 12px; color: #1a4d5c; }
+.acceptAttempt { border: 1px solid #b91c1c; color: #b91c1c; background: #fff; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; margin-left: auto; }
+.attemptRow { align-items: center; }
 
 .channelBlock { margin-top: 16px; }
 .channelHeader { font-weight: 700; color: var(--brand-blue); margin-bottom: 4px; display: block; }

@@ -3,16 +3,10 @@ import { fetchBalances, fetchPipettes, fetchTips, fetchUsers, submitEntry } from
 import { getCachedBalances, getCachedPipettes, getCachedTips, getCachedUsers, setCachedBalances, setCachedPipettes, setCachedTips, setCachedUsers } from '../storage/referenceCache';
 import { enqueueEntry } from '../storage/queue';
 import { isOnline } from '../network';
-import { NOTE_REQUIRED_TYPES } from '../types';
+import { useToast } from '../toast/ToastProvider';
 import type { Balance, ChannelPoints, EntryPayload, Pipette, PointKey, Tip, User, VerificationType } from '../types';
 import { toCanonical, toDisplay } from '../units';
 import './SignOffForm.css';
-
-const VERIFICATION_TYPES: { value: VerificationType; label: string }[] = [
-    { value: 'tolerance_3pct', label: '±3% Tolerance' },
-    { value: 'manufacturer_spec', label: 'Manufacturer Specifications' },
-    { value: 'after_external_cal', label: 'After External Calibration' },
-];
 
 const POINTS: { key: PointKey; label: string }[] = [
     { key: 'low', label: 'Low' },
@@ -39,15 +33,18 @@ const EMPTY_ROW: PointRow = { volumeUl: '', massMg: '', passFail: 'Y' };
 
 // Per-point retry state (ADR-010, tolerance_3pct only): `attempts` holds every
 // failed reading so far, `current` is the in-progress one the tech is editing.
-// Once `current` computes to a pass, it becomes the entry's final value for that point.
+// Once `current` computes to a pass, it becomes the entry's final value for that
+// point -- unless the tech explicitly `accepted` an out-of-tolerance reading as
+// final instead of retrying (stakeholder ask: don't force endless retry).
 interface PointState {
     attempts: PointRow[];
     current: PointRow;
     expanded: boolean;
+    accepted: boolean;
 }
 
 function emptyPointState(): PointState {
-    return { attempts: [], current: { ...EMPTY_ROW }, expanded: false };
+    return { attempts: [], current: { ...EMPTY_ROW }, expanded: false, accepted: false };
 }
 
 function emptyRows(): Record<PointKey, PointState> {
@@ -69,6 +66,7 @@ function tolerance3pct(volumeUl: number, massMg: number): 'Y' | 'N' {
 }
 
 export default function SignOffForm() {
+    const toast = useToast();
     const [users, setUsers] = useState<User[]>([]);
     const [balances, setBalances] = useState<Balance[]>([]);
     const [pipettes, setPipettes] = useState<Pipette[]>([]);
@@ -78,16 +76,13 @@ export default function SignOffForm() {
     const [pipetteFilter, setPipetteFilter] = useState('');
     const [balanceId, setBalanceId] = useState<number | null>(null);
     const [tipId, setTipId] = useState<number | null>(null);
-    const [verificationType, setVerificationType] = useState<VerificationType>('tolerance_3pct');
+    const [afterExternalCal, setAfterExternalCal] = useState(false);
     const [channelRows, setChannelRows] = useState<Record<number, Record<PointKey, PointState>>>(emptyChannelRows());
     const [note, setNote] = useState('');
 
     const [signOffVisible, setSignOffVisible] = useState(false);
     const [username, setUsername] = useState('');
     const [pin, setPin] = useState('');
-    const [signOffError, setSignOffError] = useState<string | null>(null);
-
-    const [status, setStatus] = useState<string | null>(null);
 
     useEffect(() => {
         loadReferenceData();
@@ -116,8 +111,8 @@ export default function SignOffForm() {
         setTips(getCachedTips());
     }
 
-    const noteRequired = NOTE_REQUIRED_TYPES.includes(verificationType);
-    const passFailEditable = verificationType !== 'tolerance_3pct';
+    const verificationType: VerificationType = afterExternalCal ? 'after_external_cal' : 'tolerance_3pct';
+    const passFailEditable = afterExternalCal;
     const selectedPipette = pipettes.find((p) => p.id === pipetteId) ?? null;
     const selectedBalance = balances.find((b) => b.id === balanceId) ?? null;
     const selectedTip = tips.find((t) => t.id === tipId) ?? null;
@@ -127,6 +122,9 @@ export default function SignOffForm() {
     const activeChannels = isMultichannel ? ALL_CHANNELS : [1];
     const activeUnit = (isRepeater ? selectedTip?.unit : selectedPipette?.unit) ?? 'uL';
     const massUnitLabel = activeUnit === 'mL' ? 'g' : 'mg';
+
+    const anyAccepted = activeChannels.some((ch) => POINTS.some(({ key }) => channelRows[ch][key].accepted));
+    const noteRequired = afterExternalCal || anyAccepted;
 
     // Pre-fill each point's Volume (editable, per ADR-009): from the selected tip for
     // repeaters (ADR-011, since a repeater's targets follow the tip, not the pipette),
@@ -155,7 +153,7 @@ export default function SignOffForm() {
     function updateRow(channel: number, key: PointKey, field: 'volumeUl' | 'massMg', value: string) {
         setChannelRows((prev) => ({
             ...prev,
-            [channel]: { ...prev[channel], [key]: { ...prev[channel][key], current: { ...prev[channel][key].current, [field]: value } } },
+            [channel]: { ...prev[channel], [key]: { ...prev[channel][key], accepted: false, current: { ...prev[channel][key].current, [field]: value } } },
         }));
     }
 
@@ -173,28 +171,42 @@ export default function SignOffForm() {
         }));
     }
 
+    // Stakeholder ask: don't force endless retry on an out-of-tolerance reading --
+    // let the tech pull a prior failed attempt back in as the final, accepted value.
+    // The entry's note becomes required to explain why (enforced via noteRequired above).
+    function acceptAttempt(channel: number, key: PointKey, attemptIndex: number) {
+        setChannelRows((prev) => {
+            const point = prev[channel][key];
+            const attempt = point.attempts[attemptIndex];
+            return {
+                ...prev,
+                [channel]: { ...prev[channel], [key]: { ...point, current: { ...attempt }, accepted: true } },
+            };
+        });
+    }
+
     function resetForm() {
         setChannelRows(emptyChannelRows());
         setTipId(null);
         setNote('');
         setUsername('');
         setPin('');
+        setAfterExternalCal(false);
     }
 
     // ADR-010/ADR-011: retry detection runs once, here, on Sign & Submit -- not while the
     // tech is still typing. A tolerance_3pct point that fails gets archived into `attempts`
     // and cleared for re-entry, checked across every active channel; submission is blocked
-    // until every point on every active channel currently reads a pass.
+    // until every point on every active channel currently reads a pass OR was explicitly
+    // accepted despite failing (acceptAttempt above).
     function openSignOff() {
-        setStatus(null);
-
         const allFilled = activeChannels.every((ch) => POINTS.every(({ key }) => channelRows[ch][key].current.volumeUl && channelRows[ch][key].current.massMg));
         if (!pipetteId || !balanceId || !allFilled || (isRepeater && !tipId)) {
-            setStatus(isRepeater && !tipId ? 'Select a tip.' : 'Fill in all required fields (Low/Mid/High Volume and Mass) for every channel.');
+            toast.error(isRepeater && !tipId ? 'Select a tip.' : 'Fill in all required fields (Low/Mid/High Volume and Mass) for every channel.');
             return;
         }
         if (noteRequired && !note) {
-            setStatus('Note is required for this verification type.');
+            toast.error('Note is required for this verification type.');
             return;
         }
 
@@ -206,10 +218,11 @@ export default function SignOffForm() {
                     const row = { ...prev[ch] };
                     for (const { key, label } of POINTS) {
                         const point = row[key];
+                        if (point.accepted) continue; // already accepted despite failing -- leave as-is
                         const passFail = tolerance3pct(Number(point.current.volumeUl), Number(point.current.massMg));
                         if (passFail === 'N') {
                             failedLabels.push(isMultichannel ? `Ch${ch} ${label}` : label);
-                            row[key] = { attempts: [...point.attempts, point.current], current: { ...EMPTY_ROW }, expanded: point.expanded };
+                            row[key] = { ...point, attempts: [...point.attempts, point.current], current: { ...EMPTY_ROW } };
                         }
                     }
                     next[ch] = row;
@@ -217,18 +230,17 @@ export default function SignOffForm() {
                 return next;
             });
             if (failedLabels.length > 0) {
-                setStatus(`${failedLabels.join(', ')} out of tolerance -- re-enter and try again.`);
+                toast.error(`${failedLabels.join(', ')} out of tolerance -- re-enter and try again, or accept a prior attempt below.`);
                 return;
             }
         }
 
-        setSignOffError(null);
         setSignOffVisible(true);
     }
 
     async function confirmSignOff() {
         if (!username || !pin) {
-            setSignOffError('Technician and PIN are required.');
+            toast.error('Technician and PIN are required.');
             return;
         }
 
@@ -270,15 +282,15 @@ export default function SignOffForm() {
             try {
                 await submitEntry(payload);
                 setSignOffVisible(false);
-                setStatus('Entry signed and submitted.');
+                toast.success('Entry signed and submitted.');
                 resetForm();
             } catch (err) {
-                setSignOffError(err instanceof Error ? err.message : 'Submission failed.');
+                toast.error(err instanceof Error ? err.message : 'Submission failed.');
             }
         } else {
             enqueueEntry(payload);
             setSignOffVisible(false);
-            setStatus('Offline -- entry signed and queued, will sync automatically.');
+            toast.success('Offline -- entry signed and queued, will sync automatically.');
             resetForm();
         }
     }
@@ -347,25 +359,16 @@ export default function SignOffForm() {
                     )}
                 </div>
 
-                <div className="card">
-                    <span className="cardTitle">Verification Type</span>
-                    {VERIFICATION_TYPES.slice(0, 2).map((t) => (
-                        <div key={t.value} className="radioRow" onClick={() => setVerificationType(t.value)}>
-                            <div className="radioOuter">
-                                {verificationType === t.value && <div className="radioInner" />}
-                            </div>
-                            <span>{t.label}</span>
-                        </div>
-                    ))}
-                    <div className="checkboxDivider" />
-                    {VERIFICATION_TYPES.slice(2).map((t) => (
-                        <div key={t.value} className="radioRow" onClick={() => setVerificationType(t.value)}>
-                            <div className="radioOuter checkboxOuter">
-                                {verificationType === t.value && <div className="radioInner checkboxInner" />}
-                            </div>
-                            <span>{t.label}</span>
-                        </div>
-                    ))}
+                <div className="card verificationCard">
+                    <label className="checkboxRow">
+                        <input type="checkbox" checked={afterExternalCal} onChange={(e) => setAfterExternalCal(e.target.checked)} />
+                        After External Calibration
+                    </label>
+                    <span className="cardHint">
+                        {afterExternalCal
+                            ? 'Manual pass/fail entry, note required.'
+                            : 'Default: pass/fail auto-computed at ±3% tolerance.'}
+                    </span>
                 </div>
             </div>
 
@@ -405,7 +408,7 @@ export default function SignOffForm() {
                                                 </select>
                                             </div>
                                         ) : (
-                                            <span className="computedNote">auto</span>
+                                            <span className="computedNote">{point.accepted ? 'accepted' : 'auto'}</span>
                                         )}
                                     </div>
                                     {point.attempts.length > 0 && (
@@ -418,6 +421,9 @@ export default function SignOffForm() {
                                                     <span className="attemptCell">{toDisplay(a.volumeUl, activeUnit)} {activeUnit}</span>
                                                     <span className="attemptCell">{toDisplay(a.massMg, activeUnit)} {massUnitLabel}</span>
                                                     <span className="attemptCell attemptFail">N</span>
+                                                    <button type="button" className="acceptAttempt" onClick={() => acceptAttempt(ch, key, i)}>
+                                                        Accept this result
+                                                    </button>
                                                 </div>
                                             ))}
                                         </div>
@@ -436,8 +442,6 @@ export default function SignOffForm() {
                 Sign &amp; Submit
             </button>
 
-            {status && <div className="status">{status}</div>}
-
             {signOffVisible && (
                 <div className="modalBackdrop" onClick={() => setSignOffVisible(false)}>
                     <div className="modalCard" onClick={(e) => e.stopPropagation()}>
@@ -453,8 +457,6 @@ export default function SignOffForm() {
 
                         <label className="label">PIN</label>
                         <input className="input" type="password" value={pin} onChange={(e) => setPin(e.target.value)} inputMode="numeric" maxLength={6} />
-
-                        {signOffError && <div className="error">{signOffError}</div>}
 
                         <button type="button" className="submit" onClick={confirmSignOff}>
                             Confirm &amp; Sign

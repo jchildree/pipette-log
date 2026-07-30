@@ -32,3 +32,8 @@
 .historyPointLine { font-size: 12px; color: #333; display: block; }
 .historyNote { margin-top: 4px; font-style: italic; color: #555; }
 .closeButton { margin-top: 16px; text-align: center; background: var(--brand-blue); color: #fff; padding: 10px; border-radius: 8px; font-weight: 600; border: none; width: 100%; cursor: pointer; }
+
+.input { border: 1px solid #ccc; border-radius: 6px; padding: 8px; margin-top: 4px; background: #fff; width: 100%; }
+.submit { margin-top: 12px; text-align: center; background: #2563eb; color: #fff; padding: 10px; border-radius: 8px; font-weight: 600; border: none; width: 100%; cursor: pointer; }
+.correctionPointRow { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.correctionPointLabel { font-weight: 700; font-size: 12px; width: 40px; flex-shrink: 0; }

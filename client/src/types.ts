@@ -1,10 +1,23 @@
 export type VerificationType = 'tolerance_3pct' | 'manufacturer_spec' | 'after_external_cal';
 
-export const NOTE_REQUIRED_TYPES: VerificationType[] = ['manufacturer_spec', 'after_external_cal'];
-
 export interface User {
     id: number;
     username: string;
+}
+
+// Full roster row, admin-only (POST /users/list) -- never includes pin_hash.
+export interface FullUser {
+    id: number;
+    username: string;
+    is_admin: boolean;
+    failed_attempts: number;
+    locked_until: string | null;
+    created_at: string;
+}
+
+export interface AdminCredentials {
+    admin_username: string;
+    admin_pin: string;
 }
 
 export type EquipmentUnit = 'uL' | 'mL';
@@ -104,6 +117,19 @@ export interface EntryPayload {
     points: Record<PointKey, MeasurementPoint>; // channel 1 (or the only channel) -- always required
     channels?: ChannelPoints[]; // present for multichannel pipettes only (ADR-011)
     note?: string;
+}
+
+// Body for POST /entries/:id/correct (ADR-005 amend-only correction) --
+// same shape as EntryPayload minus channels, since the correction UI only
+// edits the single low/mid/high triplet the Audit Log displays.
+export interface CorrectionPayload {
+    username: string;
+    pin: string;
+    pipette_id: number;
+    balance_id: number;
+    verification_type: VerificationType;
+    points: Record<PointKey, MeasurementPoint>;
+    note: string;
 }
 
 export interface QueuedEntry {

@@ -3,6 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const app = require('../src/server');
+const { sql, getPool } = require('../src/lib/db');
 
 let server;
 let baseUrl;
@@ -123,7 +124,7 @@ test('user setup + reference data + full entry lifecycle', async () => {
     assert.equal(correctionRow.signed_by_username, username);
 });
 
-test('reference data creation requires valid PIN', async () => {
+test('reference data creation requires an admin PIN', async () => {
     const refUser = `itest_ref_${Date.now()}`;
     await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: refUser, pin: '222222' }) });
 
@@ -132,6 +133,16 @@ test('reference data creation requires valid PIN', async () => {
         body: JSON.stringify({ username: refUser, pin: 'wrong', equipment_id: `BAL-ITEST-${Date.now()}` }),
     });
     assert.equal(unauthorized.status, 401);
+
+    const nonAdmin = await api('/balances', {
+        method: 'POST',
+        body: JSON.stringify({ username: refUser, pin: '222222', equipment_id: `BAL-ITEST-${Date.now()}` }),
+    });
+    assert.equal(nonAdmin.status, 403);
+    assert.equal(nonAdmin.body.error, 'admin_required');
+
+    const pool = await getPool();
+    await pool.request().input('username', sql.NVarChar, refUser).query('UPDATE users SET is_admin = 1 WHERE username = @username');
 
     const newBalance = await api('/balances', {
         method: 'POST',

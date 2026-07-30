@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { fetchBalances, fetchEntries, fetchEntryHistory, fetchPipettes } from '../api';
-import type { AuditEntry, Balance, EquipmentUnit, Pipette, PointKey, VerificationType } from '../types';
-import { toDisplay } from '../units';
+import { correctEntry, fetchBalances, fetchEntries, fetchEntryHistory, fetchPipettes, fetchUsers } from '../api';
+import { useToast } from '../toast/ToastProvider';
+import type { AuditEntry, Balance, EquipmentUnit, Pipette, PointKey, User, VerificationType } from '../types';
+import { toCanonical, toDisplay } from '../units';
 import './AuditLog.css';
 
 const VERIFICATION_TYPE_LABELS: Record<VerificationType, string> = {
@@ -32,22 +33,39 @@ function PassBadge({ pass }: { pass: 'Y' | 'N' | null }) {
     return <span className={pass === 'Y' ? 'badgePass' : 'badgeFail'}>{pass}</span>;
 }
 
+const EMPTY_POINT = { volumeUl: '', massMg: '' };
+
+interface CorrectionPointRow {
+    volumeUl: string;
+    massMg: string;
+}
+
 export default function AuditLog() {
+    const toast = useToast();
     const [pipettes, setPipettes] = useState<Pipette[]>([]);
     const [balances, setBalances] = useState<Balance[]>([]);
+    const [users, setUsers] = useState<User[]>([]);
     const [pipetteFilter, setPipetteFilter] = useState<number | null>(null);
     const [balanceFilter, setBalanceFilter] = useState<number | null>(null);
 
     const [entries, setEntries] = useState<AuditEntry[]>([]);
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     const [historyFor, setHistoryFor] = useState<AuditEntry | null>(null);
     const [history, setHistory] = useState<AuditEntry[]>([]);
 
+    const [correcting, setCorrecting] = useState(false);
+    const [correctionPoints, setCorrectionPoints] = useState<Record<PointKey, CorrectionPointRow>>({
+        low: { ...EMPTY_POINT }, mid: { ...EMPTY_POINT }, high: { ...EMPTY_POINT },
+    });
+    const [correctionNote, setCorrectionNote] = useState('');
+    const [correctionUsername, setCorrectionUsername] = useState('');
+    const [correctionPin, setCorrectionPin] = useState('');
+
     useEffect(() => {
         fetchPipettes().then(setPipettes).catch(() => {});
         fetchBalances().then(setBalances).catch(() => {});
+        fetchUsers().then(setUsers).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -57,7 +75,6 @@ export default function AuditLog() {
 
     async function loadEntries() {
         setLoading(true);
-        setError(null);
         try {
             const result = await fetchEntries({
                 pipette_id: pipetteFilter ?? undefined,
@@ -65,7 +82,7 @@ export default function AuditLog() {
             });
             setEntries(result);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to load entries.');
+            toast.error(err instanceof Error ? err.message : 'Failed to load entries.');
         } finally {
             setLoading(false);
         }
@@ -81,6 +98,62 @@ export default function AuditLog() {
             setHistory(await fetchEntryHistory(entry.id));
         } catch {
             setHistory([entry]);
+        }
+    }
+
+    // The chain's most recent row is the current state -- a correction always
+    // amends that one (ADR-005), not necessarily the row that was clicked.
+    const latest = history[history.length - 1] ?? historyFor;
+
+    function openCorrection() {
+        if (!latest) return;
+        const unit = unitFor(latest.pipette_id);
+        setCorrectionPoints({
+            low: { volumeUl: toDisplay(String(latest.volume_low_ul), unit), massMg: toDisplay(String(latest.mass_low_mg), unit) },
+            mid: { volumeUl: toDisplay(String(latest.volume_mid_ul), unit), massMg: toDisplay(String(latest.mass_mid_mg), unit) },
+            high: { volumeUl: toDisplay(String(latest.volume_high_ul), unit), massMg: toDisplay(String(latest.mass_high_mg), unit) },
+        });
+        setCorrectionNote('');
+        setCorrectionUsername('');
+        setCorrectionPin('');
+        setCorrecting(true);
+    }
+
+    function updateCorrectionPoint(key: PointKey, field: 'volumeUl' | 'massMg', value: string) {
+        setCorrectionPoints((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
+    }
+
+    async function submitCorrection() {
+        if (!latest) return;
+        if (!correctionUsername || !correctionPin) {
+            toast.error('Technician and PIN are required.');
+            return;
+        }
+        if (!correctionNote) {
+            toast.error('A note explaining the correction is required.');
+            return;
+        }
+        const unit = unitFor(latest.pipette_id);
+        try {
+            await correctEntry(latest.id, {
+                username: correctionUsername,
+                pin: correctionPin,
+                pipette_id: latest.pipette_id,
+                balance_id: latest.balance_id,
+                verification_type: latest.verification_type,
+                points: {
+                    low: { volume_ul: Number(toCanonical(correctionPoints.low.volumeUl, unit)), mass_mg: Number(toCanonical(correctionPoints.low.massMg, unit)) },
+                    mid: { volume_ul: Number(toCanonical(correctionPoints.mid.volumeUl, unit)), mass_mg: Number(toCanonical(correctionPoints.mid.massMg, unit)) },
+                    high: { volume_ul: Number(toCanonical(correctionPoints.high.volumeUl, unit)), mass_mg: Number(toCanonical(correctionPoints.high.massMg, unit)) },
+                },
+                note: correctionNote,
+            });
+            toast.success('Correction submitted.');
+            setCorrecting(false);
+            setHistory(await fetchEntryHistory(latest.id));
+            await loadEntries();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Correction failed.');
         }
     }
 
@@ -110,8 +183,7 @@ export default function AuditLog() {
             </div>
 
             {loading && <div className="status">Loading...</div>}
-            {error && <div className="error">{error}</div>}
-            {!loading && !error && entries.length === 0 && <div className="status">No entries found.</div>}
+            {!loading && entries.length === 0 && <div className="status">No entries found.</div>}
 
             {entries.map((entry) => (
                 <button key={entry.id} className="entryCard" onClick={() => openHistory(entry)}>
@@ -161,8 +233,59 @@ export default function AuditLog() {
                                 </div>
                             ))}
                         </div>
+                        <button type="button" className="submit" onClick={openCorrection}>
+                            Correct This Entry
+                        </button>
                         <button type="button" className="closeButton" onClick={() => setHistoryFor(null)}>
                             Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {correcting && latest && (
+                <div className="modalBackdrop" onClick={() => setCorrecting(false)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Correct Entry</div>
+                        {POINTS.map(({ key, label }) => (
+                            <div key={key} className="correctionPointRow">
+                                <span className="correctionPointLabel">{label}</span>
+                                <input
+                                    className="input"
+                                    value={correctionPoints[key].volumeUl}
+                                    onChange={(e) => updateCorrectionPoint(key, 'volumeUl', e.target.value)}
+                                    inputMode="decimal"
+                                    placeholder={`Volume (${unitFor(latest.pipette_id)})`}
+                                />
+                                <input
+                                    className="input"
+                                    value={correctionPoints[key].massMg}
+                                    onChange={(e) => updateCorrectionPoint(key, 'massMg', e.target.value)}
+                                    inputMode="decimal"
+                                    placeholder={`Mass (${unitFor(latest.pipette_id) === 'mL' ? 'g' : 'mg'})`}
+                                />
+                            </div>
+                        ))}
+
+                        <label className="filterLabel">Note (required)</label>
+                        <textarea className="input" value={correctionNote} onChange={(e) => setCorrectionNote(e.target.value)} />
+
+                        <label className="filterLabel">Technician</label>
+                        <select className="input" value={correctionUsername} onChange={(e) => setCorrectionUsername(e.target.value)}>
+                            <option value="">Select...</option>
+                            {users.map((u) => (
+                                <option key={u.id} value={u.username}>{u.username}</option>
+                            ))}
+                        </select>
+
+                        <label className="filterLabel">PIN</label>
+                        <input className="input" type="password" value={correctionPin} onChange={(e) => setCorrectionPin(e.target.value)} inputMode="numeric" maxLength={6} />
+
+                        <button type="button" className="submit" onClick={submitCorrection}>
+                            Confirm &amp; Sign Correction
+                        </button>
+                        <button type="button" className="closeButton" onClick={() => setCorrecting(false)}>
+                            Cancel
                         </button>
                     </div>
                 </div>

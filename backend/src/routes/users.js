@@ -1,6 +1,6 @@
 const express = require('express');
 const { sql, getPool } = require('../lib/db');
-const { setPin } = require('../lib/auth');
+const { setPin, checkAdminPin } = require('../lib/auth');
 
 const router = express.Router();
 
@@ -11,9 +11,26 @@ router.get('/users', async (req, res) => {
     res.json(result.recordset);
 });
 
+// Admin-only: full roster for the Users tab table (still never pin_hash).
+router.post('/users/list', async (req, res) => {
+    const { admin_username, admin_pin } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .query('SELECT id, username, is_admin, failed_attempts, locked_until, created_at FROM users ORDER BY username');
+    res.json(result.recordset);
+});
+
 router.post('/users/setup', async (req, res) => {
-    const { username, pin } = req.body;
+    const { username, pin, is_admin, admin_username, admin_pin } = req.body;
     if (!username || !pin) return res.status(400).json({ error: 'username and pin are required' });
+
+    if (is_admin) {
+        const auth = await checkAdminPin(admin_username, admin_pin);
+        if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+    }
 
     const pool = await getPool();
     const existing = await pool.request()
@@ -25,7 +42,38 @@ router.post('/users/setup', async (req, res) => {
     }
 
     await setPin(username, pin);
+    if (is_admin) {
+        await pool.request()
+            .input('username', sql.NVarChar, username)
+            .query('UPDATE users SET is_admin = 1 WHERE username = @username');
+    }
     res.status(204).send();
+});
+
+// Admin-only: promote/demote, or clear a lockout.
+router.patch('/users/:id', async (req, res) => {
+    const { id } = req.params;
+    const { admin_username, admin_pin, is_admin, unlock } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    if (is_admin !== undefined) {
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('isAdmin', sql.Bit, is_admin ? 1 : 0)
+            .query('UPDATE users SET is_admin = @isAdmin WHERE id = @id');
+    }
+    if (unlock) {
+        await pool.request()
+            .input('id', sql.Int, id)
+            .query('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = @id');
+    }
+
+    const result = await pool.request()
+        .input('id', sql.Int, id)
+        .query('SELECT id, username, is_admin, failed_attempts, locked_until, created_at FROM users WHERE id = @id');
+    res.json(result.recordset[0]);
 });
 
 module.exports = router;

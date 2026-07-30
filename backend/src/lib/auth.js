@@ -7,13 +7,13 @@ const LOCKOUT_MINUTES = 15;
 /**
  * Validates username+PIN against the DB, applying lockout after
  * MAX_ATTEMPTS consecutive failures (PIN-guess rate limiting).
- * Returns { ok: true, userId } or { ok: false, reason }.
+ * Returns { ok: true, userId, isAdmin } or { ok: false, reason }.
  */
 async function checkPin(username, pin) {
     const pool = await getPool();
     const result = await pool.request()
         .input('username', sql.NVarChar, username)
-        .query('SELECT id, pin_hash, failed_attempts, locked_until FROM users WHERE username = @username');
+        .query('SELECT id, pin_hash, failed_attempts, locked_until, is_admin FROM users WHERE username = @username');
 
     const user = result.recordset[0];
     if (!user || !user.pin_hash) return { ok: false, reason: 'invalid_credentials' };
@@ -41,7 +41,15 @@ async function checkPin(username, pin) {
         .input('id', sql.Int, user.id)
         .query('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = @id');
 
-    return { ok: true, userId: user.id };
+    return { ok: true, userId: user.id, isAdmin: !!user.is_admin };
+}
+
+/** Same as checkPin, but also requires the account to be an admin. */
+async function checkAdminPin(username, pin) {
+    const auth = await checkPin(username, pin);
+    if (!auth.ok) return auth;
+    if (!auth.isAdmin) return { ok: false, reason: 'admin_required' };
+    return auth;
 }
 
 async function setPin(username, pin) {
@@ -59,4 +67,4 @@ async function setPin(username, pin) {
         `);
 }
 
-module.exports = { checkPin, setPin, MAX_ATTEMPTS, LOCKOUT_MINUTES };
+module.exports = { checkPin, checkAdminPin, setPin, MAX_ATTEMPTS, LOCKOUT_MINUTES };

@@ -1,4 +1,4 @@
-import type { AuditEntry, AuditListFilters, Balance, BalancePayload, EntryPayload, Pipette, PipettePayload, Tip, User } from './types';
+import type { AdminCredentials, AuditEntry, AuditListFilters, Balance, BalancePayload, CorrectionPayload, EntryPayload, FullUser, Pipette, PipettePayload, Tip, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -16,8 +16,14 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const fetchUsers = () => apiFetch<User[]>('/users');
-export const setupUser = (payload: { username: string; pin: string }) =>
+export const setupUser = (payload: { username: string; pin: string; is_admin?: boolean } & Partial<AdminCredentials>) =>
     apiFetch<void>('/users/setup', { method: 'POST', body: JSON.stringify(payload) });
+
+export const fetchAllUsers = (creds: AdminCredentials) =>
+    apiFetch<FullUser[]>('/users/list', { method: 'POST', body: JSON.stringify(creds) });
+
+export const updateUser = (id: number, payload: { is_admin?: boolean; unlock?: boolean } & AdminCredentials) =>
+    apiFetch<FullUser>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
 export const fetchBalances = () => apiFetch<Balance[]>('/balances');
 export const fetchPipettes = () => apiFetch<Pipette[]>('/pipettes');
 export const fetchTips = () => apiFetch<Tip[]>('/tips');
@@ -44,3 +50,6 @@ export const fetchEntries = (filters: AuditListFilters = {}) => {
 };
 
 export const fetchEntryHistory = (id: number) => apiFetch<AuditEntry[]>(`/entries/${id}/history`);
+
+export const correctEntry = (id: number, payload: CorrectionPayload) =>
+    apiFetch<AuditEntry>(`/entries/${id}/correct`, { method: 'POST', body: JSON.stringify(payload) });

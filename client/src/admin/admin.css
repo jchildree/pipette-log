@@ -1,0 +1,22 @@
+.adminBar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 16px;
+    background: var(--brand-light);
+    border-bottom: 1px solid var(--brand-border);
+    font-size: 13px;
+}
+
+.adminBadge { font-weight: 700; color: var(--brand-blue); }
+.adminLink { background: none; border: none; color: var(--brand-blue); font-weight: 600; cursor: pointer; text-decoration: underline; font-size: 13px; padding: 0; }
+
+.modalBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 900; }
+.modalCard { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 380px; }
+.modalTitle { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.label { font-weight: 600; margin-top: 8px; display: block; }
+.input { border: 1px solid #ccc; border-radius: 6px; padding: 8px; margin-top: 4px; background: #fff; width: 100%; }
+.error { color: #b91c1c; margin-top: 8px; text-align: center; }
+.submit { margin-top: 16px; text-align: center; background: #2563eb; color: #fff; padding: 10px; border-radius: 8px; font-weight: 600; border: none; width: 100%; cursor: pointer; }
+.cancel { margin-top: 8px; text-align: center; color: #555; background: none; border: none; width: 100%; cursor: pointer; }
