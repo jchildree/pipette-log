@@ -36,6 +36,15 @@ docker compose up -d
 
 This starts SQL Server, creates the `PipetteLog` database, and applies every schema in `backend/sqlSchemas/` in order. `mssql-init` exits once done; `mssql` keeps running.
 
+If port 1433 is already taken on your machine (another SQL Server instance), add a `docker-compose.override.yml` remapping the host port and set `DB_PORT` to match in `backend/.env`:
+
+```yaml
+services:
+  mssql:
+    ports: !override
+      - "1434:1433"
+```
+
 ### 2. Backend
 
 ```bash
@@ -44,6 +53,16 @@ cp .env.example .env   # DB_PASSWORD must match the one in the root .env
 npm install
 npm run dev   # or: npm start
 ```
+
+Seed reference data before first use (all one-off scripts, not part of the app runtime):
+
+```bash
+node scripts/seed-admin.js <username> <pin>              # bootstraps the first admin account
+node scripts/seed-equipment.js scripts/equipment.json    # pipettes + balances
+node scripts/seed-tips.js scripts/tips.json               # repeater tip low/mid/high targets
+```
+
+`scripts/xlsx-to-equipment-json.js` and `scripts/xlsx-to-tips-json.js` regenerate those two JSON files from the source workbook (`T:\IL\QA Projects\Pipette docs\Simple table.xlsx`) if the real inventory changes.
 
 ### 3. Client
 
@@ -65,14 +84,14 @@ npm run build   # production build, output in client/dist
 
 Four tabs across the top:
 
-- **Sign Off** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, choose a verification type, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Signing asks for a technician username + PIN, created via Sign Up below.
-- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history.
-- **Equipment** -- add new pipettes and balances to the reference data (equipment ID, category, calibration due date, low/mid/high targets, etc.). Also requires a technician username + PIN.
-- **Sign Up** -- create a new technician username + PIN. No admin approval needed -- this is what a first-time user does before using Sign Off or Equipment.
+- **New Verification** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Verification defaults to auto pass/fail at ±3% tolerance; check **After External Calibration** for manual pass/fail entry instead (note required). A reading that fails tolerance is archived as a retry attempt and the field clears for re-entry -- or click **Accept this result** on a prior attempt to submit it as final anyway (note required). Signing asks for a technician username + PIN, created via Users below.
+- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history, or **Correct This Entry** to amend the current values (technician username + PIN + note required -- corrections are additive, the original stays in the history).
+- **Equipment** -- browse pipettes/balances as paginated tables (click a row to expand full detail). Adding new equipment is admin-only: log in via **Admin Login** (top right) to unlock **+ Add Equipment**.
+- **Users** -- create a new technician username + PIN, no approval needed. Logged-in admins additionally see a checkbox to create a new user as an admin, and a table of every user (promote/demote, deactivate/reactivate, unlock a PIN-locked account).
 
 ### First login
 
-Open the client, go to **Sign Up**, create a username/PIN. That account can then sign on to **Sign Off** or **Equipment**.
+Bootstrap the first admin outside the app: `node backend/scripts/seed-admin.js <username> <pin>`. Everyone else self-signs-up from the **Users** tab -- that account can sign on to **New Verification**. Adding equipment or managing other users needs an admin: click **Admin Login** (top right of every page) with an admin account's credentials.
 
 ## Tests
 
