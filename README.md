@@ -2,6 +2,28 @@
 
 Pipette/balance calibration sign-off app. `backend/` is an Express + MSSQL REST API, `client/` is a React + Vite web app. See `CLAUDE.md` for repo layout and `docs/Obsidian Vault/Pipette Log/INDEX.md` for design decisions (ADRs).
 
+For a plain-language walkthrough of daily use, see [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
+
+## Tech stack
+
+| Layer | Technology | Notes |
+|---|---|---|
+| Client | React 19 + TypeScript, Vite 8 | Plain SPA, no framework (Next/Remix) or router library -- tab state lives in `App.tsx`. `oxlint` for linting. See ADR-012 for why this replaced an earlier Expo/React Native attempt. |
+| Backend | Node.js (v18+), Express 4 | CommonJS (`type: "commonjs"` in `backend/package.json`), not ESM. |
+| Database | Microsoft SQL Server 2022 | Runs via the `mssql` npm driver (`backend/src/lib/db.js`). Schema is plain `.sql` files in `backend/sqlSchemas/`, applied in numeric filename order by `docker/db-init.sh` -- there is no migration framework (Knex/Prisma/etc), so schema changes are a new numbered `.sql` file. |
+| Auth | `bcrypt` password hashing, custom PIN-lockout logic | `backend/src/lib/auth.js`. Session is a technician username + 6-digit PIN checked per-action (sign-off, correction, admin actions), not a persistent login token -- there's a separate lightweight admin session in the client (`client/src/admin/AdminSession.tsx`) that just remembers the last-used admin credentials for convenience. |
+| Infra (local/on-prem) | Docker Compose | `docker-compose.yml` runs two services: `mssql` (the DB, stays up) and `mssql-init` (one-shot schema bootstrap, exits after running). No Kubernetes/cloud dependency -- this is designed to run on a single on-prem box or a dev machine. |
+| Tests | Node's built-in `node:test` runner | No Jest/Mocha/Vitest. `backend/test/*.test.js`; unit tests need no DB, integration tests need the Docker DB running with reference data seeded. |
+
+**Where things live, for making changes:**
+- REST routes: `backend/src/routes/*.js` (`entries.js` = sign-offs/corrections, `reference.js` = pipettes/balances/tips CRUD, `users.js` = accounts/admin).
+- Business rules (tolerance math, pass/fail): `backend/src/lib/tolerance.js`.
+- DB schema: `backend/sqlSchemas/NNN_description.sql`, new files only, never edit an applied one in place -- add a new numbered file for any change and re-run `docker compose up -d` against a fresh volume, or hand-apply the delta to an existing DB.
+- Client screens: `client/src/screens/*.tsx`, one file per tab (`SignOffForm`, `AuditLog`, `EquipmentManager`, `UsersManager`).
+- API calls from the client: `client/src/api.ts`.
+
+No CI/CD pipeline exists yet -- deploys are the manual "Building from source" steps below, run by whoever owns the box.
+
 ## Quick start (downloaded release build)
 
 If you got this as a zip from a GitHub Release, `client/dist/` is already built -- skip straight to serving it, no `npm install` needed on the client side.
@@ -84,9 +106,9 @@ npm run build   # production build, output in client/dist
 
 Four tabs across the top:
 
-- **New Verification** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Verification defaults to auto pass/fail at ±3% tolerance; check **After External Calibration** for manual pass/fail entry instead (note required). A reading that fails tolerance is archived as a retry attempt and the field clears for re-entry -- or click **Accept this result** on a prior attempt to submit it as final anyway (note required). Signing asks for a technician username + PIN, created via Users below.
+- **New Verification** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Pass/fail is always auto-computed at ±3% tolerance; **After External Calibration** is note-only -- it doesn't change how pass/fail is calculated, it just flags the entry and requires a note. A reading that fails tolerance is archived as a retry attempt and the field clears for re-entry -- or click **Accept this result** on a prior attempt to submit it as final anyway (note required). Signing asks for a technician username + PIN, created via Users below.
 - **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history, or **Correct This Entry** to amend the current values (technician username + PIN + note required -- corrections are additive, the original stays in the history).
-- **Equipment** -- browse pipettes/balances as paginated tables (click a row to expand full detail). Adding new equipment is admin-only: log in via **Admin Login** (top right) to unlock **+ Add Equipment**.
+- **Equipment** -- browse pipettes/balances as paginated tables (click a row to expand full detail). Adding, editing, or deleting equipment is admin-only: log in via **Admin Login** (top right) to unlock **+ Add Equipment** and per-row **Edit** (which also offers **Delete Equipment**).
 - **Users** -- create a new technician username + PIN, no approval needed. Logged-in admins additionally see a checkbox to create a new user as an admin, and a table of every user (promote/demote, deactivate/reactivate, unlock a PIN-locked account).
 
 ### First login

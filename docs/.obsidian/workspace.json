@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Obsidian Vault/Pipette Log/Build Plan - Phase 1.md",
+                "file": "USER_GUIDE.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Build Plan - Phase 1"
+              "title": "USER_GUIDE"
             }
           }
         ]
@@ -41,7 +41,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -206,6 +208,7 @@
   },
   "active": "b1beab2cc73c5513",
   "lastOpenFiles": [
+    "Obsidian Vault/Pipette Log/Build Plan - Phase 1.md",
     "Obsidian Vault/Pipette Log/ADR-007-standalone-phase1-backend.md",
     "Obsidian Vault/The Question/Source - Tolerance Formula.md",
     "Obsidian Vault/The Question/Source - Standalone Phase 1, Nexus-Shaped for Migration.md",
@@ -215,7 +218,6 @@
     "Obsidian Vault/The Question/Source - Draft Mutability Lock-In.md",
     "Obsidian Vault/The Question/Case - Pipette Log Spec Interrogation.md",
     "Obsidian Vault/Pipette Log/ADR-002-offline-first-sync.md",
-    "Obsidian Vault/Pipette Log/Build Plan - Phase 1.md",
     "Obsidian Vault/Pipette Log/Build Plan - Phase 1.md.tmp.18656.3d0e18f46300",
     "Obsidian Vault/Pipette Log/ADR-007-standalone-phase1-backend.md.tmp.18656.9d8d259a2b01",
     "Obsidian Vault/The Question/Source - Phase 1 Auth Model.md.tmp.18656.a3b56ee4be38",
