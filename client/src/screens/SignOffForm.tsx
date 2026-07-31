@@ -26,10 +26,9 @@ function detectCategory(category: string | null) {
 interface PointRow {
     volumeUl: string;
     massMg: string;
-    passFail: 'Y' | 'N';
 }
 
-const EMPTY_ROW: PointRow = { volumeUl: '', massMg: '', passFail: 'Y' };
+const EMPTY_ROW: PointRow = { volumeUl: '', massMg: '' };
 
 // Per-point retry state (ADR-010, tolerance_3pct only): `attempts` holds every
 // failed reading so far, `current` is the in-progress one the tech is editing.
@@ -111,8 +110,9 @@ export default function SignOffForm() {
         setTips(getCachedTips());
     }
 
-    const verificationType: VerificationType = afterExternalCal ? 'after_external_cal' : 'tolerance_3pct';
-    const passFailEditable = afterExternalCal;
+    // Checkbox is a note-only annotation (stakeholder ask) -- verification stays
+    // tolerance_3pct and pass/fail stays auto-computed at +/-3% either way.
+    const verificationType: VerificationType = 'tolerance_3pct';
     const selectedPipette = pipettes.find((p) => p.id === pipetteId) ?? null;
     const selectedBalance = balances.find((b) => b.id === balanceId) ?? null;
     const selectedTip = tips.find((t) => t.id === tipId) ?? null;
@@ -154,13 +154,6 @@ export default function SignOffForm() {
         setChannelRows((prev) => ({
             ...prev,
             [channel]: { ...prev[channel], [key]: { ...prev[channel][key], accepted: false, current: { ...prev[channel][key].current, [field]: value } } },
-        }));
-    }
-
-    function updatePassFail(channel: number, key: PointKey, value: 'Y' | 'N') {
-        setChannelRows((prev) => ({
-            ...prev,
-            [channel]: { ...prev[channel], [key]: { ...prev[channel][key], current: { ...prev[channel][key].current, passFail: value } } },
         }));
     }
 
@@ -250,7 +243,6 @@ export default function SignOffForm() {
             return {
                 volume_ul: Number(point.current.volumeUl),
                 mass_mg: Number(point.current.massMg),
-                pass_fail: passFailEditable ? point.current.passFail : undefined,
                 attempts: point.attempts.length
                     ? point.attempts.map((a) => ({ volume_ul: Number(a.volumeUl), mass_mg: Number(a.massMg) }))
                     : undefined,
@@ -367,8 +359,8 @@ export default function SignOffForm() {
                     </label>
                     <span className="cardHint">
                         {afterExternalCal
-                            ? 'Manual pass/fail entry, note required.'
-                            : 'Default: pass/fail auto-computed at ±3% tolerance.'}
+                            ? 'Note only -- pass/fail still auto-computed at ±3% tolerance, note required.'
+                            : 'Pass/fail auto-computed at ±3% tolerance.'}
                     </span>
                 </div>
             </div>
@@ -401,16 +393,7 @@ export default function SignOffForm() {
                                             onChange={(e) => updateRow(ch, key, 'massMg', toCanonical(e.target.value, activeUnit))}
                                             inputMode="decimal"
                                         />
-                                        {passFailEditable ? (
-                                            <div className="tableCellPicker">
-                                                <select value={point.current.passFail} onChange={(e) => updatePassFail(ch, key, e.target.value as 'Y' | 'N')}>
-                                                    <option value="Y">Y</option>
-                                                    <option value="N">N</option>
-                                                </select>
-                                            </div>
-                                        ) : (
-                                            <span className="computedNote">{point.accepted ? 'accepted' : 'auto'}</span>
-                                        )}
+                                        <span className="computedNote">{point.accepted ? 'accepted' : 'auto'}</span>
                                     </div>
                                     {point.attempts.length > 0 && (
                                         <div className="attemptsBlock">
