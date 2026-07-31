@@ -28,6 +28,8 @@ export interface Balance {
     equipment_type: 'Balance';
     equipment_id: string;
     calibration_due_date: string | null;
+    department: string | null;
+    status: string | null;
 }
 
 // Fields beyond id/category/range/low-mid-high/unit/status come from the full
@@ -80,6 +82,32 @@ export interface PipettePayload {
     low_usage_ul?: number;
     unit?: EquipmentUnit;
     status?: string;
+}
+
+// PATCH /equipment/:id -- admin edit, any subset of shared equipment columns.
+export interface EquipmentPatchPayload extends AdminCredentials {
+    category?: string | null;
+    pipette_range?: string | null;
+    calibration_due_date?: string | null;
+    low_ul?: number | null;
+    mid_ul?: number | null;
+    high_ul?: number | null;
+    low_usage_ul?: number | null;
+    unit?: EquipmentUnit | null;
+    status?: string | null;
+    rack_number?: string | null;
+    serial_number?: string | null;
+    sub_location?: string | null;
+    last_calibration_date?: string | null;
+    mechanism?: string | null;
+    calibration_conducted_by?: string | null;
+    ranges_used?: string | null;
+    department?: string | null;
+    manufacturer?: string | null;
+    old_id?: string | null;
+    review_comment?: string | null;
+    adjustment_comment?: string | null;
+    comments_2?: string | null;
 }
 
 export interface MeasurementPoint {

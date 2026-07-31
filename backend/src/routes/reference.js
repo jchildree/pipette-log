@@ -70,6 +70,76 @@ router.post('/pipettes', async (req, res) => {
     res.status(201).json(result.recordset[0]);
 });
 
+// Admin-only edit of any equipment row (pipette or balance) -- e.g. calibration
+// due date, department, active/inactive status. Shared table (002_equipment.sql),
+// so one PATCH covers both types rather than duplicating per-type routes.
+const EQUIPMENT_FIELDS = {
+    category: sql.NVarChar,
+    pipette_range: sql.NVarChar,
+    calibration_due_date: sql.Date,
+    low_ul: sql.Decimal(10, 3),
+    mid_ul: sql.Decimal(10, 3),
+    high_ul: sql.Decimal(10, 3),
+    low_usage_ul: sql.Decimal(10, 3),
+    unit: sql.NVarChar(4),
+    status: sql.NVarChar,
+    rack_number: sql.NVarChar,
+    serial_number: sql.NVarChar,
+    sub_location: sql.NVarChar,
+    last_calibration_date: sql.Date,
+    mechanism: sql.NVarChar,
+    calibration_conducted_by: sql.NVarChar,
+    ranges_used: sql.NVarChar,
+    department: sql.NVarChar,
+    manufacturer: sql.NVarChar,
+    old_id: sql.NVarChar,
+    review_comment: sql.NVarChar,
+    adjustment_comment: sql.NVarChar,
+    comments_2: sql.NVarChar,
+};
+
+router.patch('/equipment/:id', async (req, res) => {
+    const { id } = req.params;
+    const { admin_username, admin_pin, ...fields } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    const request = pool.request().input('id', sql.Int, id);
+    const setClauses = [];
+    for (const [key, type] of Object.entries(EQUIPMENT_FIELDS)) {
+        if (fields[key] === undefined) continue;
+        request.input(key, type, fields[key] === '' ? null : fields[key]);
+        setClauses.push(`${key} = @${key}`);
+    }
+    if (!setClauses.length) return res.status(400).json({ error: 'no fields to update' });
+
+    const result = await request.query(
+        `UPDATE equipment SET ${setClauses.join(', ')} OUTPUT INSERTED.* WHERE id = @id`
+    );
+    if (!result.recordset[0]) return res.status(404).json({ error: 'equipment not found' });
+    res.json(result.recordset[0]);
+});
+
+router.delete('/equipment/:id', async (req, res) => {
+    const { id } = req.params;
+    const { admin_username, admin_pin } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    try {
+        const result = await pool.request()
+            .input('id', sql.Int, id)
+            .query('DELETE FROM equipment OUTPUT DELETED.id WHERE id = @id');
+        if (!result.recordset[0]) return res.status(404).json({ error: 'equipment not found' });
+        res.status(204).send();
+    } catch (err) {
+        if (err.number === 547) return res.status(409).json({ error: 'equipment has entries on record and cannot be deleted' });
+        throw err;
+    }
+});
+
 router.post('/tips', async (req, res) => {
     const { username, pin, tip_id, low_ul, mid_ul, high_ul, low_usage_ul, unit } = req.body;
     const auth = await checkAdminPin(username, pin);

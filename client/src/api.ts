@@ -1,4 +1,4 @@
-import type { AdminCredentials, AuditEntry, AuditListFilters, Balance, BalancePayload, CorrectionPayload, EntryPayload, FullUser, Pipette, PipettePayload, Tip, User } from './types';
+import type { AdminCredentials, AuditEntry, AuditListFilters, Balance, BalancePayload, CorrectionPayload, EntryPayload, EquipmentPatchPayload, FullUser, Pipette, PipettePayload, Tip, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -33,6 +33,12 @@ export const addBalance = (payload: BalancePayload) =>
 
 export const addPipette = (payload: PipettePayload) =>
     apiFetch<Pipette>('/pipettes', { method: 'POST', body: JSON.stringify(payload) });
+
+export const updateEquipment = (id: number, payload: EquipmentPatchPayload) =>
+    apiFetch<Pipette | Balance>(`/equipment/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+
+export const deleteEquipment = (id: number, creds: AdminCredentials) =>
+    apiFetch<void>(`/equipment/${id}`, { method: 'DELETE', body: JSON.stringify(creds) });
 
 export const submitEntry = (payload: EntryPayload) =>
     apiFetch<{ id: number; signed_at: string }>('/entries', {

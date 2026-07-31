@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
-import { addBalance, addPipette, fetchBalances, fetchPipettes, fetchUsers } from '../api';
+import { addBalance, addPipette, deleteEquipment, fetchBalances, fetchPipettes, fetchUsers, updateEquipment } from '../api';
 import { useAdminSession } from '../admin/AdminSession';
 import { useToast } from '../toast/ToastProvider';
 import { deriveRangeTargets } from '../rangeParse';
-import type { Balance, EquipmentUnit, Pipette, User } from '../types';
+import type { Balance, EquipmentPatchPayload, EquipmentUnit, Pipette, User } from '../types';
 import './EquipmentManager.css';
 
 const CATEGORIES = ['single channel', 'multi channel', 'repeater', 'positive displacement'];
@@ -11,6 +11,39 @@ const UNITS: EquipmentUnit[] = ['uL', 'mL'];
 const STATUSES = ['Active', 'Inactive'];
 const UNIT_FACTOR: Record<EquipmentUnit, number> = { uL: 1, mL: 1000 };
 const PAGE_SIZE = 100;
+
+// Every field displayed in the Pipette/Balance detail grid -- key must match
+// the equipment column name so confirmEdit() can send it straight through.
+const PIPETTE_EDIT_FIELDS: [string, string][] = [
+    ['category', 'Category'],
+    ['pipette_range', 'Range'],
+    ['calibration_due_date', 'Calibration Due Date'],
+    ['low_ul', 'Low (uL)'],
+    ['mid_ul', 'Mid (uL)'],
+    ['high_ul', 'High (uL)'],
+    ['low_usage_ul', 'Low Usage (uL)'],
+    ['unit', 'Unit'],
+    ['status', 'Status'],
+    ['rack_number', 'Rack'],
+    ['serial_number', 'Serial'],
+    ['sub_location', 'Sub Location'],
+    ['department', 'Department'],
+    ['manufacturer', 'Manufacturer'],
+    ['mechanism', 'Mechanism'],
+    ['last_calibration_date', 'Last Calibration'],
+    ['calibration_conducted_by', 'Calibration Conducted By'],
+    ['ranges_used', 'Ranges Used'],
+    ['old_id', 'Old ID'],
+    ['review_comment', 'Review'],
+    ['adjustment_comment', 'Adjustment'],
+    ['comments_2', 'Comments'],
+];
+
+const BALANCE_EDIT_FIELDS: [string, string][] = [
+    ['calibration_due_date', 'Calibration Due Date'],
+    ['department', 'Department'],
+    ['status', 'Status'],
+];
 
 type EquipmentType = 'Pipette' | 'Balance';
 
@@ -74,6 +107,11 @@ export default function EquipmentManager() {
     const [signOffVisible, setSignOffVisible] = useState(false);
     const [username, setUsername] = useState('');
     const [pin, setPin] = useState('');
+
+    const [editTarget, setEditTarget] = useState<{ type: EquipmentType; item: Pipette | Balance } | null>(null);
+    const [editUsername, setEditUsername] = useState('');
+    const [editPin, setEditPin] = useState('');
+    const [editFields, setEditFields] = useState<Record<string, string>>({});
 
     useEffect(() => {
         loadEquipment();
@@ -158,6 +196,59 @@ export default function EquipmentManager() {
         }
     }
 
+    function openEdit(type: EquipmentType, item: Pipette | Balance) {
+        const fieldList = type === 'Pipette' ? PIPETTE_EDIT_FIELDS : BALANCE_EDIT_FIELDS;
+        const initial: Record<string, string> = {};
+        for (const [key] of fieldList) {
+            const value = (item as unknown as Record<string, unknown>)[key];
+            initial[key] = value == null ? '' : String(value);
+        }
+        setEditFields(initial);
+        setEditUsername('');
+        setEditPin('');
+        setEditTarget({ type, item });
+    }
+
+    async function confirmEdit() {
+        if (!editTarget) return;
+        if (!editUsername || !editPin) {
+            toast.error('Username and PIN are required.');
+            return;
+        }
+        const fieldList = editTarget.type === 'Pipette' ? PIPETTE_EDIT_FIELDS : BALANCE_EDIT_FIELDS;
+        const numericFields = new Set(['low_ul', 'mid_ul', 'high_ul', 'low_usage_ul']);
+        const payload: Record<string, unknown> = { admin_username: editUsername, admin_pin: editPin };
+        for (const [key] of fieldList) {
+            const raw = editFields[key] ?? '';
+            payload[key] = raw === '' ? null : (numericFields.has(key) ? Number(raw) : raw);
+        }
+        try {
+            await updateEquipment(editTarget.item.id, payload as unknown as EquipmentPatchPayload);
+            toast.success('Equipment updated.');
+            setEditTarget(null);
+            loadEquipment();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update equipment.');
+        }
+    }
+
+    async function confirmDelete() {
+        if (!editTarget) return;
+        if (!editUsername || !editPin) {
+            toast.error('Username and PIN are required.');
+            return;
+        }
+        if (!window.confirm(`Delete ${editTarget.item.equipment_id}? This cannot be undone.`)) return;
+        try {
+            await deleteEquipment(editTarget.item.id, { admin_username: editUsername, admin_pin: editPin });
+            toast.success(`Deleted ${editTarget.item.equipment_id}.`);
+            setEditTarget(null);
+            loadEquipment();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete equipment.');
+        }
+    }
+
     const pipetteTotalPages = Math.max(1, Math.ceil(pipettes.length / PAGE_SIZE));
     const balanceTotalPages = Math.max(1, Math.ceil(balances.length / PAGE_SIZE));
     const pagedPipettes = pipettes.slice(pipettePage * PAGE_SIZE, pipettePage * PAGE_SIZE + PAGE_SIZE);
@@ -216,6 +307,7 @@ export default function EquipmentManager() {
                                                     {p.review_comment && <span>Review: {p.review_comment}</span>}
                                                     {p.adjustment_comment && <span>Adjustment: {p.adjustment_comment}</span>}
                                                     {p.comments_2 && <span>Comments: {p.comments_2}</span>}
+                                                    <button type="button" className="addButton" onClick={(e) => { e.stopPropagation(); openEdit('Pipette', p); }}>Edit</button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -246,10 +338,23 @@ export default function EquipmentManager() {
                         </thead>
                         <tbody>
                             {pagedBalances.map((b) => (
-                                <tr key={b.id} className="eqRow" onClick={() => setExpandedBalanceId(expandedBalanceId === b.id ? null : b.id)}>
-                                    <td>{b.equipment_id}</td>
-                                    <td>{b.calibration_due_date ?? 'n/a'}</td>
-                                </tr>
+                                <Fragment key={b.id}>
+                                    <tr className="eqRow" onClick={() => setExpandedBalanceId(expandedBalanceId === b.id ? null : b.id)}>
+                                        <td>{b.equipment_id}</td>
+                                        <td>{b.calibration_due_date ?? 'n/a'}</td>
+                                    </tr>
+                                    {expandedBalanceId === b.id && (
+                                        <tr className="eqDetailRow">
+                                            <td colSpan={2}>
+                                                <div className="eqDetailGrid">
+                                                    <span>Department: {b.department ?? 'n/a'}</span>
+                                                    <span>Status: {b.status ?? 'n/a'}</span>
+                                                    <button type="button" className="addButton" onClick={(e) => { e.stopPropagation(); openEdit('Balance', b); }}>Edit</button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </Fragment>
                             ))}
                         </tbody>
                     </table>
@@ -361,6 +466,56 @@ export default function EquipmentManager() {
 
                         <button type="button" className="submit" onClick={confirmSignOff}>Confirm &amp; Sign</button>
                         <button type="button" className="cancel" onClick={() => { setSignOffVisible(false); setAddModalOpen(true); }}>Back</button>
+                    </div>
+                </div>
+            )}
+
+            {editTarget && (
+                <div className="modalBackdrop" onClick={() => setEditTarget(null)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Edit {editTarget.type} -- {editTarget.item.equipment_id}</div>
+
+                        {(editTarget.type === 'Pipette' ? PIPETTE_EDIT_FIELDS : BALANCE_EDIT_FIELDS).map(([key, label]) => (
+                            <Field key={key} label={label}>
+                                {key === 'status' ? (
+                                    <select className="input" value={editFields[key] ?? ''} onChange={(e) => setEditFields((f) => ({ ...f, [key]: e.target.value }))}>
+                                        {STATUSES.map((s) => (
+                                            <option key={s} value={s}>{s}</option>
+                                        ))}
+                                    </select>
+                                ) : key === 'unit' ? (
+                                    <select className="input" value={editFields[key] ?? ''} onChange={(e) => setEditFields((f) => ({ ...f, [key]: e.target.value }))}>
+                                        {UNITS.map((u) => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
+                                ) : key === 'category' ? (
+                                    <select className="input" value={editFields[key] ?? ''} onChange={(e) => setEditFields((f) => ({ ...f, [key]: e.target.value }))}>
+                                        {CATEGORIES.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input className="input" value={editFields[key] ?? ''} onChange={(e) => setEditFields((f) => ({ ...f, [key]: e.target.value }))} />
+                                )}
+                            </Field>
+                        ))}
+
+                        <Field label="Username">
+                            <select className="input" value={editUsername} onChange={(e) => setEditUsername(e.target.value)}>
+                                <option value="">Select...</option>
+                                {users.map((u) => (
+                                    <option key={u.id} value={u.username}>{u.username}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="PIN">
+                            <input className="input" type="password" value={editPin} onChange={(e) => setEditPin(e.target.value)} inputMode="numeric" maxLength={6} />
+                        </Field>
+
+                        <button type="button" className="submit" onClick={confirmEdit}>Save</button>
+                        <button type="button" className="cancel" onClick={confirmDelete}>Delete Equipment</button>
+                        <button type="button" className="cancel" onClick={() => setEditTarget(null)}>Cancel</button>
                     </div>
                 </div>
             )}

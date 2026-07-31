@@ -1,6 +1,7 @@
-import { createContext, useContext, useState } from 'react';
-import { fetchAllUsers } from '../api';
+import { createContext, useContext, useEffect, useState } from 'react';
+import { fetchAllUsers, fetchUsers } from '../api';
 import { useToast } from '../toast/ToastProvider';
+import type { User } from '../types';
 import './admin.css';
 
 // In-memory only (never persisted) -- gates admin-only UI and pre-fills the
@@ -24,7 +25,12 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     const [formUsername, setFormUsername] = useState('');
     const [formPin, setFormPin] = useState('');
     const [error, setError] = useState<string | null>(null);
+    const [users, setUsers] = useState<User[]>([]);
     const toast = useToast();
+
+    useEffect(() => {
+        fetchUsers().then(setUsers).catch(() => {});
+    }, []);
 
     function logout() {
         setIsAdmin(false);
@@ -69,7 +75,12 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
                     <div className="modalCard" onClick={(e) => e.stopPropagation()}>
                         <div className="modalTitle">Admin Login</div>
                         <label className="label">Username</label>
-                        <input className="input" value={formUsername} onChange={(e) => setFormUsername(e.target.value)} autoCapitalize="none" />
+                        <select className="input" value={formUsername} onChange={(e) => setFormUsername(e.target.value)}>
+                            <option value="">Select...</option>
+                            {users.map((u) => (
+                                <option key={u.id} value={u.username}>{u.username}</option>
+                            ))}
+                        </select>
                         <label className="label">PIN</label>
                         <input className="input" type="password" value={formPin} onChange={(e) => setFormPin(e.target.value)} inputMode="numeric" maxLength={6} />
                         {error && <div className="error">{error}</div>}
