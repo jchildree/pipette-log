@@ -102,6 +102,15 @@ npm run dev     # local dev server
 npm run build   # production build, output in client/dist
 ```
 
+To serve a production build, run `serve` from the **repo root** (not from `client/`) so the `client/dist` path resolves:
+
+```bash
+cd ..    # back to repo root, if you're still in client/
+npx serve -l 8081 client/dist
+```
+
+Running `npx serve -l 8081 client/dist` from inside `client/` looks for `client/client/dist`, which doesn't exist -- every request 404s instantly (`serve`'s console log looks like `HTTP <timestamp> ::1 Returned 404 in 2 ms`). If you hit that, check your cwd.
+
 ## Using the app
 
 Four tabs across the top:
