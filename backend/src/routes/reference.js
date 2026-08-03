@@ -98,11 +98,16 @@ const EQUIPMENT_FIELDS = {
     comments_2: sql.NVarChar,
 };
 
+const EQUIPMENT_STATUSES = ['Active', 'Inactive', 'Out of Service'];
+
 router.patch('/equipment/:id', async (req, res) => {
     const { id } = req.params;
     const { admin_username, admin_pin, ...fields } = req.body;
     const auth = await checkAdminPin(admin_username, admin_pin);
     if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+    if (fields.status !== undefined && fields.status !== '' && !EQUIPMENT_STATUSES.includes(fields.status)) {
+        return res.status(400).json({ error: `status must be one of: ${EQUIPMENT_STATUSES.join(', ')}` });
+    }
 
     const pool = await getPool();
     const request = pool.request().input('id', sql.Int, id);

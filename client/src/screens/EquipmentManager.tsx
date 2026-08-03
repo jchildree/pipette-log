@@ -8,7 +8,7 @@ import './EquipmentManager.css';
 
 const CATEGORIES = ['single channel', 'multi channel', 'repeater', 'positive displacement'];
 const UNITS: EquipmentUnit[] = ['uL', 'mL'];
-const STATUSES = ['Active', 'Inactive'];
+const STATUSES = ['Active', 'Inactive', 'Out of Service'];
 const UNIT_FACTOR: Record<EquipmentUnit, number> = { uL: 1, mL: 1000 };
 const PAGE_SIZE = 100;
 
