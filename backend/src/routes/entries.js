@@ -13,6 +13,55 @@ function computePointPassFail(verificationType, point) {
     return point.pass_fail ?? null; // manual for manufacturer_spec / after_external_cal
 }
 
+function computeEntryPassFail(verificationType, points) {
+    return Object.fromEntries(POINTS.map((p) => [p, computePointPassFail(verificationType, points[p])]));
+}
+
+// "Failure" = any point reads N (master plan, 2026-08-03). No separate acceptance
+// column needed: tolerance_3pct's client-side retry flow (SignOffForm.tsx acceptAttempt)
+// already blocks an unaccepted N from ever reaching submit, and the manual verification
+// types (manufacturer_spec/after_external_cal) have no accept concept -- a manual N is
+// always a genuine failure. So pass_low/mid/high alone fully determine failure either way.
+function isFailingRow(row) {
+    return row.pass_low === 'N' || row.pass_mid === 'N' || row.pass_high === 'N';
+}
+
+function entryWillFail(passFail) {
+    return POINTS.some((p) => passFail[p] === 'N');
+}
+
+// Consecutive-failure signer gate (Sprint 2, master plan 2026-08-03). Same
+// signed_by_user_id may sign 2 consecutive failed entries for one equipment; a 3rd
+// straight failure needs a different signer (Sprint 3 wires the auto-flip to
+// Out of Service when that 3rd entry also fails). Checked independently for the
+// pipette side and balance side of an entry -- entries are the source of truth
+// (ADR-005), so this reads the last 2 current-state rows rather than a stored counter.
+async function checkSignerGate(pool, equipmentId, roleColumn, incomingUserId) {
+    const result = await pool.request()
+        .input('equipmentId', sql.Int, equipmentId)
+        .query(`
+            SELECT TOP 2 pass_low, pass_mid, pass_high, signed_by_user_id
+            FROM entries e
+            WHERE e.${roleColumn} = @equipmentId
+                AND NOT EXISTS (SELECT 1 FROM entries c WHERE c.corrects_entry_id = e.id)
+            ORDER BY e.created_at DESC
+        `);
+    const [mostRecent, secondMostRecent] = result.recordset;
+    if (!mostRecent || !secondMostRecent) return true;
+    if (!isFailingRow(mostRecent) || !isFailingRow(secondMostRecent)) return true;
+    if (mostRecent.signed_by_user_id == null || mostRecent.signed_by_user_id !== secondMostRecent.signed_by_user_id) return true;
+    return mostRecent.signed_by_user_id !== incomingUserId;
+}
+
+// Returns 'pipette' or 'balance' (whichever side is blocked) or null if the submission
+// may proceed. Only failing submissions are gated -- a passing entry breaks any streak.
+async function blockedBySignerGate(pool, { pipette_id, balance_id, verification_type, points, userId }) {
+    if (!entryWillFail(computeEntryPassFail(verification_type, points))) return null;
+    if (!(await checkSignerGate(pool, pipette_id, 'pipette_id', userId))) return 'pipette';
+    if (!(await checkSignerGate(pool, balance_id, 'balance_id', userId))) return 'balance';
+    return null;
+}
+
 function validatePoints(points) {
     return points && POINTS.every((p) => points[p] && points[p].volume_ul != null && points[p].mass_mg != null);
 }
@@ -75,7 +124,7 @@ async function insertPointAttempts(transaction, entryId, pointKey, channel, atte
 }
 
 async function insertEntry(pool, { pipette_id, balance_id, verification_type, points, channels, note, signedByUserId, correctsEntryId }) {
-    const passFail = Object.fromEntries(POINTS.map((p) => [p, computePointPassFail(verification_type, points[p])]));
+    const passFail = computeEntryPassFail(verification_type, points);
 
     const transaction = new sql.Transaction(pool);
     await transaction.begin();
@@ -176,6 +225,14 @@ router.post('/entries', async (req, res) => {
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
 
     const pool = await getPool();
+    const gateBlock = await blockedBySignerGate(pool, { pipette_id, balance_id, verification_type, points, userId: auth.userId });
+    if (gateBlock) {
+        return res.status(403).json({
+            error: 'different_signer_required',
+            message: `Same technician signed the last 2 consecutive failed entries for this ${gateBlock}; a 3rd consecutive failure requires a different signer.`,
+        });
+    }
+
     const result = await insertEntry(pool, { pipette_id, balance_id, verification_type, points, channels, note, signedByUserId: auth.userId });
 
     res.status(201).json(result.recordset[0]);
@@ -243,6 +300,14 @@ router.post('/entries/:id/correct', async (req, res) => {
     if (!auth.ok) return res.status(401).json({ error: auth.reason });
 
     const pool = await getPool();
+    const gateBlock = await blockedBySignerGate(pool, { pipette_id, balance_id, verification_type, points, userId: auth.userId });
+    if (gateBlock) {
+        return res.status(403).json({
+            error: 'different_signer_required',
+            message: `Same technician signed the last 2 consecutive failed entries for this ${gateBlock}; a 3rd consecutive failure requires a different signer.`,
+        });
+    }
+
     const result = await insertEntry(pool, {
         pipette_id, balance_id, verification_type, points, channels, note,
         signedByUserId: auth.userId, correctsEntryId: id,

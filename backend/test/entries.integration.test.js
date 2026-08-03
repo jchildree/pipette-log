@@ -197,3 +197,60 @@ test('PIN lockout after repeated failures', async () => {
     assert.equal(stillLocked.status, 401);
     assert.equal(stillLocked.body.error, 'locked');
 });
+
+test('consecutive-failure signer gate: same signer ok for 2 straight fails, blocked on 3rd, different signer unblocks, pass resets streak', async () => {
+    const userA = `itest_gateA_${Date.now()}`;
+    const userB = `itest_gateB_${Date.now()}`;
+    await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: userA, pin: '333333' }) });
+    await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: userB, pin: '444444' }) });
+
+    const pool = await getPool();
+    await pool.request().input('username', sql.NVarChar, userA).query('UPDATE users SET is_admin = 1 WHERE username = @username');
+
+    const balance = await api('/balances', {
+        method: 'POST',
+        body: JSON.stringify({ username: userA, pin: '333333', equipment_id: `BAL-GATE-${Date.now()}` }),
+    });
+    const pipette = await api('/pipettes', {
+        method: 'POST',
+        body: JSON.stringify({
+            username: userA, pin: '333333', equipment_id: `PI-GATE-${Date.now()}`,
+            category: 'single channel', low_ul: 20, mid_ul: 100, high_ul: 200,
+        }),
+    });
+    const pipetteId = pipette.body.id;
+    const balanceId = balance.body.id;
+
+    function failingPoints() {
+        return points({ low: { mass_mg: 1 } }); // grossly out of tolerance -> N
+    }
+
+    async function submit(username, pin, pts) {
+        return api('/entries', {
+            method: 'POST',
+            body: JSON.stringify({ username, pin, pipette_id: pipetteId, balance_id: balanceId, verification_type: 'tolerance_3pct', points: pts }),
+        });
+    }
+
+    const first = await submit(userA, '333333', failingPoints());
+    assert.equal(first.status, 201);
+    assert.equal(first.body.pass_low, 'N');
+
+    const second = await submit(userA, '333333', failingPoints());
+    assert.equal(second.status, 201, '2 consecutive fails by the same signer are allowed');
+
+    const third = await submit(userA, '333333', failingPoints());
+    assert.equal(third.status, 403, '3rd consecutive fail by the same signer is blocked');
+    assert.equal(third.body.error, 'different_signer_required');
+
+    const thirdByOther = await submit(userB, '444444', failingPoints());
+    assert.equal(thirdByOther.status, 201, '3rd consecutive fail by a different signer is allowed');
+
+    const passing = await submit(userA, '333333', points());
+    assert.equal(passing.status, 201, 'a passing entry always succeeds and resets the streak');
+
+    const afterResetFirst = await submit(userA, '333333', failingPoints());
+    assert.equal(afterResetFirst.status, 201, 'streak reset by the pass -- same signer ok for fail #1 again');
+    const afterResetSecond = await submit(userA, '333333', failingPoints());
+    assert.equal(afterResetSecond.status, 201, 'streak reset by the pass -- same signer ok for fail #2 again');
+});
