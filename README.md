@@ -30,6 +30,12 @@ If you got this as a zip from a GitHub Release, `client/dist/` is already built 
 
 **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Node.js](https://nodejs.org/) (v18+) installed.
 
+**If you're extracting the zip into a OneDrive-synced folder** (Desktop and Documents are OneDrive-synced by default on managed Windows machines), OneDrive's "Files On-Demand" can leave files as unhydrated cloud placeholders -- they show up in Explorer and pass an `ls`/`dir` check, but read as empty or partial until OneDrive finishes downloading them, so `serve` can return a blank or broken page even though `index.html` "exists". Before serving:
+1. Right-click the extracted folder (or at least `client/dist/`) in Explorer -> **Always keep on this device**.
+2. Wait for the OneDrive sync icon on that folder to clear (green check, not a cloud icon).
+
+This bit an earlier native-client attempt too (see ADR-012). Extracting outside OneDrive (e.g. `C:\Apps\pipette-log`) avoids the problem entirely.
+
 ```bash
 # 1. Database
 cp .env.example .env   # set DB_PASSWORD to a strong password
@@ -110,6 +116,8 @@ npx serve -l 8081 client/dist
 ```
 
 Running `npx serve -l 8081 client/dist` from inside `client/` looks for `client/client/dist`, which doesn't exist -- every request 404s instantly (`serve`'s console log looks like `HTTP <timestamp> ::1 Returned 404 in 2 ms`). If you hit that, check your cwd.
+
+**Blank page even though `serve` is running and returning 200s:** open the browser's devtools console (F12) first -- that's the fastest way to tell a JS error (crash before render) apart from an empty API response (backend not running / wrong `VITE_API_URL` / CORS). If the console is empty too, suspect the OneDrive placeholder-file issue above -- an unhydrated `index-*.js` can load as 0 bytes and fail silently.
 
 ## Using the app
 
