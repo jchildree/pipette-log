@@ -108,6 +108,10 @@ router.patch('/equipment/:id', async (req, res) => {
     if (fields.status !== undefined && fields.status !== '' && !EQUIPMENT_STATUSES.includes(fields.status)) {
         return res.status(400).json({ error: `status must be one of: ${EQUIPMENT_STATUSES.join(', ')}` });
     }
+    // Master plan Sprint 5 (2026-08-03): flipping to Inactive/Out of Service must record why.
+    if (['Inactive', 'Out of Service'].includes(fields.status) && !fields.review_comment) {
+        return res.status(400).json({ error: 'review_comment is required when status is Inactive or Out of Service' });
+    }
 
     const pool = await getPool();
     const request = pool.request().input('id', sql.Int, id);
@@ -165,6 +169,53 @@ router.post('/tips', async (req, res) => {
             VALUES (@tipId, @lowUl, @midUl, @highUl, @lowUsageUl, @unit)
         `);
     res.status(201).json(result.recordset[0]);
+});
+
+const TIP_FIELDS = {
+    tip_id: sql.NVarChar,
+    low_ul: sql.Decimal(10, 3),
+    mid_ul: sql.Decimal(10, 3),
+    high_ul: sql.Decimal(10, 3),
+    low_usage_ul: sql.Decimal(10, 3),
+    unit: sql.NVarChar(4),
+};
+
+router.patch('/tips/:id', async (req, res) => {
+    const { id } = req.params;
+    const { admin_username, admin_pin, ...fields } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    const request = pool.request().input('id', sql.Int, id);
+    const setClauses = [];
+    for (const [key, type] of Object.entries(TIP_FIELDS)) {
+        if (fields[key] === undefined) continue;
+        request.input(key, type, fields[key] === '' ? null : fields[key]);
+        setClauses.push(`${key} = @${key}`);
+    }
+    if (!setClauses.length) return res.status(400).json({ error: 'no fields to update' });
+
+    const result = await request.query(
+        `UPDATE tips SET ${setClauses.join(', ')} OUTPUT INSERTED.* WHERE id = @id`
+    );
+    if (!result.recordset[0]) return res.status(404).json({ error: 'tip not found' });
+    res.json(result.recordset[0]);
+});
+
+// tips has no FK (005_tips.sql) so delete needs no conflict handling.
+router.delete('/tips/:id', async (req, res) => {
+    const { id } = req.params;
+    const { admin_username, admin_pin } = req.body;
+    const auth = await checkAdminPin(admin_username, admin_pin);
+    if (!auth.ok) return res.status(auth.reason === 'admin_required' ? 403 : 401).json({ error: auth.reason });
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('id', sql.Int, id)
+        .query('DELETE FROM tips OUTPUT DELETED.id WHERE id = @id');
+    if (!result.recordset[0]) return res.status(404).json({ error: 'tip not found' });
+    res.status(204).send();
 });
 
 module.exports = router;

@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
-import { addBalance, addPipette, deleteEquipment, fetchBalances, fetchPipettes, fetchUsers, updateEquipment } from '../api';
+import { addBalance, addPipette, addTip, deleteEquipment, deleteTip, fetchBalances, fetchPipettes, fetchTips, fetchUsers, updateEquipment, updateTip } from '../api';
 import { useAdminSession } from '../admin/AdminSession';
 import { useToast } from '../toast/ToastProvider';
 import { deriveRangeTargets } from '../rangeParse';
-import type { Balance, EquipmentPatchPayload, EquipmentUnit, Pipette, User } from '../types';
+import type { Balance, EquipmentPatchPayload, EquipmentUnit, Pipette, Tip, TipPatchPayload, User } from '../types';
 import './EquipmentManager.css';
 
 const CATEGORIES = ['single channel', 'multi channel', 'repeater', 'positive displacement'];
@@ -43,7 +43,12 @@ const BALANCE_EDIT_FIELDS: [string, string][] = [
     ['calibration_due_date', 'Calibration Due Date'],
     ['department', 'Department'],
     ['status', 'Status'],
+    ['review_comment', 'Review'],
 ];
+
+// Master plan Sprint 5 (2026-08-03): comment explaining the status change is
+// required going into these two, same noteRequired pattern as SignOffForm.
+const COMMENT_REQUIRED_STATUSES = ['Inactive', 'Out of Service'];
 
 type EquipmentType = 'Pipette' | 'Balance';
 
@@ -113,14 +118,35 @@ export default function EquipmentManager() {
     const [editPin, setEditPin] = useState('');
     const [editFields, setEditFields] = useState<Record<string, string>>({});
 
+    const [tips, setTips] = useState<Tip[]>([]);
+    const [addTipModalOpen, setAddTipModalOpen] = useState(false);
+    const [tipId, setTipId] = useState('');
+    const [tipLowUl, setTipLowUl] = useState('');
+    const [tipMidUl, setTipMidUl] = useState('');
+    const [tipHighUl, setTipHighUl] = useState('');
+    const [tipLowUsageUl, setTipLowUsageUl] = useState('');
+    const [tipUnit, setTipUnit] = useState<EquipmentUnit>('uL');
+    const [tipUsername, setTipUsername] = useState('');
+    const [tipPin, setTipPin] = useState('');
+
+    const [editTipTarget, setEditTipTarget] = useState<Tip | null>(null);
+    const [editTipUsername, setEditTipUsername] = useState('');
+    const [editTipPin, setEditTipPin] = useState('');
+    const [editTipFields, setEditTipFields] = useState<Record<string, string>>({});
+
     useEffect(() => {
         loadEquipment();
+        loadTips();
         fetchUsers().then(setUsers).catch(() => {});
     }, []);
 
     function loadEquipment() {
         fetchPipettes().then(setPipettes).catch(() => {});
         fetchBalances().then(setBalances).catch(() => {});
+    }
+
+    function loadTips() {
+        fetchTips().then(setTips).catch(() => {});
     }
 
     function resetAddForm() {
@@ -215,6 +241,10 @@ export default function EquipmentManager() {
             toast.error('Username and PIN are required.');
             return;
         }
+        if (COMMENT_REQUIRED_STATUSES.includes(editFields.status ?? '') && !editFields.review_comment) {
+            toast.error('Review comment is required when status is Inactive or Out of Service.');
+            return;
+        }
         const fieldList = editTarget.type === 'Pipette' ? PIPETTE_EDIT_FIELDS : BALANCE_EDIT_FIELDS;
         const numericFields = new Set(['low_ul', 'mid_ul', 'high_ul', 'low_usage_ul']);
         const payload: Record<string, unknown> = { admin_username: editUsername, admin_pin: editPin };
@@ -246,6 +276,101 @@ export default function EquipmentManager() {
             loadEquipment();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to delete equipment.');
+        }
+    }
+
+    function openAddTipModal() {
+        if (!isAdmin) {
+            toast.error('Admin login required to add tips.');
+            return;
+        }
+        setTipId('');
+        setTipLowUl('');
+        setTipMidUl('');
+        setTipHighUl('');
+        setTipLowUsageUl('');
+        setTipUnit('uL');
+        setTipUsername(adminUsername);
+        setTipPin(adminPin);
+        setAddTipModalOpen(true);
+    }
+
+    async function confirmAddTip() {
+        if (!tipId) {
+            toast.error('Tip ID is required.');
+            return;
+        }
+        if (!tipUsername || !tipPin) {
+            toast.error('Technician and PIN are required.');
+            return;
+        }
+        try {
+            await addTip({
+                username: tipUsername, pin: tipPin, tip_id: tipId,
+                low_ul: toCanonicalUl(tipLowUl, tipUnit),
+                mid_ul: toCanonicalUl(tipMidUl, tipUnit),
+                high_ul: toCanonicalUl(tipHighUl, tipUnit),
+                low_usage_ul: toCanonicalUl(tipLowUsageUl, tipUnit),
+                unit: tipUnit,
+            });
+            toast.success(`Added tip ${tipId}.`);
+            setAddTipModalOpen(false);
+            loadTips();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to add tip.');
+        }
+    }
+
+    function openEditTip(tip: Tip) {
+        setEditTipFields({
+            tip_id: tip.tip_id,
+            low_ul: tip.low_ul != null ? String(tip.low_ul) : '',
+            mid_ul: tip.mid_ul != null ? String(tip.mid_ul) : '',
+            high_ul: tip.high_ul != null ? String(tip.high_ul) : '',
+            low_usage_ul: tip.low_usage_ul != null ? String(tip.low_usage_ul) : '',
+            unit: tip.unit ?? 'uL',
+        });
+        setEditTipUsername('');
+        setEditTipPin('');
+        setEditTipTarget(tip);
+    }
+
+    async function confirmEditTip() {
+        if (!editTipTarget) return;
+        if (!editTipUsername || !editTipPin) {
+            toast.error('Username and PIN are required.');
+            return;
+        }
+        const numericFields = new Set(['low_ul', 'mid_ul', 'high_ul', 'low_usage_ul']);
+        const payload: Record<string, unknown> = { admin_username: editTipUsername, admin_pin: editTipPin };
+        for (const key of ['tip_id', 'low_ul', 'mid_ul', 'high_ul', 'low_usage_ul', 'unit']) {
+            const raw = editTipFields[key] ?? '';
+            payload[key] = raw === '' ? null : (numericFields.has(key) ? Number(raw) : raw);
+        }
+        try {
+            await updateTip(editTipTarget.id, payload as unknown as TipPatchPayload);
+            toast.success('Tip updated.');
+            setEditTipTarget(null);
+            loadTips();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update tip.');
+        }
+    }
+
+    async function confirmDeleteTip() {
+        if (!editTipTarget) return;
+        if (!editTipUsername || !editTipPin) {
+            toast.error('Username and PIN are required.');
+            return;
+        }
+        if (!window.confirm(`Delete ${editTipTarget.tip_id}? This cannot be undone.`)) return;
+        try {
+            await deleteTip(editTipTarget.id, { admin_username: editTipUsername, admin_pin: editTipPin });
+            toast.success(`Deleted ${editTipTarget.tip_id}.`);
+            setEditTipTarget(null);
+            loadTips();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to delete tip.');
         }
     }
 
@@ -368,6 +493,41 @@ export default function EquipmentManager() {
                 )}
             </div>
 
+            <div className="listCard">
+                <div className="headerRow">
+                    <span className="cardTitle">Tips ({tips.length})</span>
+                    {isAdmin ? (
+                        <button type="button" className="addButton" onClick={openAddTipModal}>+ Add Tip</button>
+                    ) : (
+                        <span className="adminNote">Admin login required to add tips</span>
+                    )}
+                </div>
+                <div className="tableScroll">
+                    <table className="eqTable">
+                        <thead>
+                            <tr>
+                                <th>Tip ID</th>
+                                <th>Low/Mid/High</th>
+                                <th>Low Usage</th>
+                                <th>Unit</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {tips.map((t) => (
+                                <tr key={t.id} className="eqRow">
+                                    <td>{t.tip_id}</td>
+                                    <td>{t.low_ul ?? 'n/a'} / {t.mid_ul ?? 'n/a'} / {t.high_ul ?? 'n/a'}</td>
+                                    <td>{t.low_usage_ul ?? 'n/a'}</td>
+                                    <td>{t.unit ?? 'uL'}</td>
+                                    <td><button type="button" className="addButton" onClick={() => openEditTip(t)}>Edit</button></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             {addModalOpen && (
                 <div className="modalBackdrop" onClick={() => setAddModalOpen(false)}>
                     <div className="modalCard" onClick={(e) => e.stopPropagation()}>
@@ -476,7 +636,7 @@ export default function EquipmentManager() {
                         <div className="modalTitle">Edit {editTarget.type} -- {editTarget.item.equipment_id}</div>
 
                         {(editTarget.type === 'Pipette' ? PIPETTE_EDIT_FIELDS : BALANCE_EDIT_FIELDS).map(([key, label]) => (
-                            <Field key={key} label={label}>
+                            <Field key={key} label={key === 'review_comment' && COMMENT_REQUIRED_STATUSES.includes(editFields.status ?? '') ? `${label} (required)` : label}>
                                 {key === 'status' ? (
                                     <select className="input" value={editFields[key] ?? ''} onChange={(e) => setEditFields((f) => ({ ...f, [key]: e.target.value }))}>
                                         {STATUSES.map((s) => (
@@ -516,6 +676,95 @@ export default function EquipmentManager() {
                         <button type="button" className="submit" onClick={confirmEdit}>Save</button>
                         <button type="button" className="cancel" onClick={confirmDelete}>Delete Equipment</button>
                         <button type="button" className="cancel" onClick={() => setEditTarget(null)}>Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            {addTipModalOpen && (
+                <div className="modalBackdrop" onClick={() => setAddTipModalOpen(false)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Add Tip</div>
+
+                        <Field label="Tip ID">
+                            <input className="input" value={tipId} onChange={(e) => setTipId(e.target.value)} placeholder="e.g. 1.25mL" />
+                        </Field>
+                        <Field label="Unit">
+                            <select className="input" value={tipUnit} onChange={(e) => setTipUnit(e.target.value as EquipmentUnit)}>
+                                {UNITS.map((u) => (
+                                    <option key={u} value={u}>{u}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <div className="pointRow">
+                            <div className="pointField">
+                                <label className="label">Low ({tipUnit})</label>
+                                <input className="input" value={tipLowUl} onChange={(e) => setTipLowUl(e.target.value)} inputMode="decimal" />
+                            </div>
+                            <div className="pointField">
+                                <label className="label">Mid ({tipUnit})</label>
+                                <input className="input" value={tipMidUl} onChange={(e) => setTipMidUl(e.target.value)} inputMode="decimal" />
+                            </div>
+                            <div className="pointField">
+                                <label className="label">High ({tipUnit})</label>
+                                <input className="input" value={tipHighUl} onChange={(e) => setTipHighUl(e.target.value)} inputMode="decimal" />
+                            </div>
+                        </div>
+                        <Field label={`Low Usage (${tipUnit})`}>
+                            <input className="input" value={tipLowUsageUl} onChange={(e) => setTipLowUsageUl(e.target.value)} inputMode="decimal" />
+                        </Field>
+
+                        <Field label="Technician">
+                            <select className="input" value={tipUsername} onChange={(e) => setTipUsername(e.target.value)}>
+                                <option value="">Select...</option>
+                                {users.map((u) => (
+                                    <option key={u.id} value={u.username}>{u.username}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="PIN">
+                            <input className="input" type="password" value={tipPin} onChange={(e) => setTipPin(e.target.value)} inputMode="numeric" maxLength={6} />
+                        </Field>
+
+                        <button type="button" className="submit" onClick={confirmAddTip}>Add Tip</button>
+                        <button type="button" className="cancel" onClick={() => setAddTipModalOpen(false)}>Cancel</button>
+                    </div>
+                </div>
+            )}
+
+            {editTipTarget && (
+                <div className="modalBackdrop" onClick={() => setEditTipTarget(null)}>
+                    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+                        <div className="modalTitle">Edit Tip -- {editTipTarget.tip_id}</div>
+
+                        {([['tip_id', 'Tip ID'], ['low_ul', 'Low (uL)'], ['mid_ul', 'Mid (uL)'], ['high_ul', 'High (uL)'], ['low_usage_ul', 'Low Usage (uL)'], ['unit', 'Unit']] as [string, string][]).map(([key, label]) => (
+                            <Field key={key} label={label}>
+                                {key === 'unit' ? (
+                                    <select className="input" value={editTipFields[key] ?? ''} onChange={(e) => setEditTipFields((f) => ({ ...f, [key]: e.target.value }))}>
+                                        {UNITS.map((u) => (
+                                            <option key={u} value={u}>{u}</option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input className="input" value={editTipFields[key] ?? ''} onChange={(e) => setEditTipFields((f) => ({ ...f, [key]: e.target.value }))} />
+                                )}
+                            </Field>
+                        ))}
+
+                        <Field label="Username">
+                            <select className="input" value={editTipUsername} onChange={(e) => setEditTipUsername(e.target.value)}>
+                                <option value="">Select...</option>
+                                {users.map((u) => (
+                                    <option key={u.id} value={u.username}>{u.username}</option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="PIN">
+                            <input className="input" type="password" value={editTipPin} onChange={(e) => setEditTipPin(e.target.value)} inputMode="numeric" maxLength={6} />
+                        </Field>
+
+                        <button type="button" className="submit" onClick={confirmEditTip}>Save</button>
+                        <button type="button" className="cancel" onClick={confirmDeleteTip}>Delete Tip</button>
+                        <button type="button" className="cancel" onClick={() => setEditTipTarget(null)}>Cancel</button>
                     </div>
                 </div>
             )}

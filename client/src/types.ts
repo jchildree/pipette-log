@@ -131,6 +131,27 @@ export interface Tip {
     unit: EquipmentUnit | null;
 }
 
+export interface TipPayload {
+    username: string;
+    pin: string;
+    tip_id: string;
+    low_ul?: number;
+    mid_ul?: number;
+    high_ul?: number;
+    low_usage_ul?: number;
+    unit?: EquipmentUnit;
+}
+
+// PATCH /tips/:id -- admin edit, any subset of tip columns.
+export interface TipPatchPayload extends AdminCredentials {
+    tip_id?: string | null;
+    low_ul?: number | null;
+    mid_ul?: number | null;
+    high_ul?: number | null;
+    low_usage_ul?: number | null;
+    unit?: EquipmentUnit | null;
+}
+
 // One multichannel channel's low/mid/high triplet (ADR-011).
 export interface ChannelPoints {
     channel: number; // 1-8
