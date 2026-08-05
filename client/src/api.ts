@@ -57,5 +57,7 @@ export const fetchEntries = (filters: AuditListFilters = {}) => {
 
 export const fetchEntryHistory = (id: number) => apiFetch<AuditEntry[]>(`/entries/${id}/history`);
 
+export const fetchLatestEntry = (equipmentId: number) => apiFetch<AuditEntry | null>(`/entries/latest/${equipmentId}`);
+
 export const correctEntry = (id: number, payload: CorrectionPayload) =>
     apiFetch<AuditEntry>(`/entries/${id}/correct`, { method: 'POST', body: JSON.stringify(payload) });

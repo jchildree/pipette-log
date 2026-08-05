@@ -310,6 +310,24 @@ router.get('/entries', async (req, res) => {
     res.json(result.recordset);
 });
 
+// Latest current-state entry for one piece of equipment (pipette or balance side),
+// used by SignOffForm's last-verification panel (Sprint 4, master plan 2026-08-03).
+router.get('/entries/latest/:equipmentId', async (req, res) => {
+    const { equipmentId } = req.params;
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('equipmentId', sql.Int, equipmentId)
+        .query(`
+            SELECT TOP 1 e.*, u.username AS signed_by_username
+            FROM entries e
+            LEFT JOIN users u ON u.id = e.signed_by_user_id
+            WHERE (e.pipette_id = @equipmentId OR e.balance_id = @equipmentId)
+                AND NOT EXISTS (SELECT 1 FROM entries c WHERE c.corrects_entry_id = e.id)
+            ORDER BY e.created_at DESC
+        `);
+    res.json(result.recordset[0] ?? null);
+});
+
 router.post('/entries/:id/correct', async (req, res) => {
     const { id } = req.params;
     const { username, pin, pipette_id, balance_id, verification_type, points, channels, note } = req.body;

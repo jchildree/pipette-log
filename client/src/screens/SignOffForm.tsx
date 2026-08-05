@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { fetchBalances, fetchPipettes, fetchTips, fetchUsers, submitEntry } from '../api';
+import { fetchBalances, fetchLatestEntry, fetchPipettes, fetchTips, fetchUsers, submitEntry } from '../api';
 import { getCachedBalances, getCachedPipettes, getCachedTips, getCachedUsers, setCachedBalances, setCachedPipettes, setCachedTips, setCachedUsers } from '../storage/referenceCache';
 import { enqueueEntry } from '../storage/queue';
 import { isOnline } from '../network';
 import { useToast } from '../toast/ToastProvider';
-import type { Balance, ChannelPoints, EntryPayload, Pipette, PointKey, Tip, User, VerificationType } from '../types';
+import type { AuditEntry, Balance, ChannelPoints, EntryPayload, Pipette, PointKey, Tip, User, VerificationType } from '../types';
 import { toCanonical, toDisplay } from '../units';
 import './SignOffForm.css';
 
@@ -17,6 +17,18 @@ const POINTS: { key: PointKey; label: string }[] = [
 // ADR-011: channel 1 is used for single-channel/repeater pipettes too (there's just
 // only ever one active channel for them) -- unifies the state shape either way.
 const ALL_CHANNELS = [1, 2, 3, 4, 5, 6, 7, 8];
+
+// Sprint 4 (master plan 2026-08-03): pickers exclude Inactive/Out of Service equipment.
+// status is free-text NVARCHAR sourced from inventory import, so null/'' still counts
+// as active -- only an explicit non-Active value excludes it.
+function isActiveStatus(status: string | null) {
+    return status == null || status === '' || status === 'Active';
+}
+
+// Mirrors backend entries.js isFailingRow -- any N point fails the entry.
+function entryPassed(entry: AuditEntry) {
+    return entry.pass_low !== 'N' && entry.pass_mid !== 'N' && entry.pass_high !== 'N';
+}
 
 function detectCategory(category: string | null) {
     const c = (category ?? '').toLowerCase();
@@ -83,9 +95,24 @@ export default function SignOffForm() {
     const [username, setUsername] = useState('');
     const [pin, setPin] = useState('');
 
+    const [lastEntry, setLastEntry] = useState<AuditEntry | null>(null);
+
     useEffect(() => {
         loadReferenceData();
     }, []);
+
+    // Sprint 4: last-verification panel next to the pipette-info card.
+    useEffect(() => {
+        if (!pipetteId) {
+            setLastEntry(null);
+            return;
+        }
+        let cancelled = false;
+        fetchLatestEntry(pipetteId)
+            .then((entry) => { if (!cancelled) setLastEntry(entry); })
+            .catch(() => { if (!cancelled) setLastEntry(null); });
+        return () => { cancelled = true; };
+    }, [pipetteId]);
 
     async function loadReferenceData() {
         if (isOnline()) {
@@ -116,7 +143,8 @@ export default function SignOffForm() {
     const selectedPipette = pipettes.find((p) => p.id === pipetteId) ?? null;
     const selectedBalance = balances.find((b) => b.id === balanceId) ?? null;
     const selectedTip = tips.find((t) => t.id === tipId) ?? null;
-    const filteredPipettes = pipettes.filter((p) => p.equipment_id.toLowerCase().includes(pipetteFilter.toLowerCase()));
+    const filteredPipettes = pipettes.filter((p) => isActiveStatus(p.status) && p.equipment_id.toLowerCase().includes(pipetteFilter.toLowerCase()));
+    const activeBalances = balances.filter((b) => isActiveStatus(b.status));
 
     const { isMultichannel, isRepeater } = detectCategory(selectedPipette?.category ?? null);
     const activeChannels = isMultichannel ? ALL_CHANNELS : [1];
@@ -319,6 +347,11 @@ export default function SignOffForm() {
                             {selectedPipette.low_usage_ul != null && (
                                 <div className="cardMetaLine">Low Usage: {toDisplay(String(selectedPipette.low_usage_ul), selectedPipette.unit ?? 'uL')} {selectedPipette.unit ?? 'uL'}</div>
                             )}
+                            <div className="cardMetaLine">
+                                Last Verification: {lastEntry
+                                    ? `${new Date(lastEntry.signed_at ?? lastEntry.created_at).toLocaleDateString()} -- ${entryPassed(lastEntry) ? 'Pass' : 'Fail'}${lastEntry.signed_by_username ? ` (${lastEntry.signed_by_username})` : ''}`
+                                    : 'none on record'}
+                            </div>
                         </div>
                     )}
                 </div>
@@ -344,7 +377,7 @@ export default function SignOffForm() {
                     <span className="cardTitle">Balance ID</span>
                     <select className="cardPicker" value={balanceId ?? ''} onChange={(e) => setBalanceId(e.target.value ? Number(e.target.value) : null)}>
                         <option value="">Select...</option>
-                        {balances.map((b) => (
+                        {activeBalances.map((b) => (
                             <option key={b.id} value={b.id}>{b.equipment_id}</option>
                         ))}
                     </select>
