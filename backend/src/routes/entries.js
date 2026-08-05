@@ -310,6 +310,110 @@ router.get('/entries', async (req, res) => {
     res.json(result.recordset);
 });
 
+const EXPORT_COLUMNS = [
+    'id', 'pipette_id', 'pipette_equipment_id', 'balance_id', 'balance_equipment_id',
+    'verification_type', 'volume_low_ul', 'mass_low_mg', 'pass_low',
+    'volume_mid_ul', 'mass_mid_mg', 'pass_mid', 'volume_high_ul', 'mass_high_mg', 'pass_high',
+    'note', 'signed_by_user_id', 'signed_by_username', 'signed_at', 'corrects_entry_id', 'corrected', 'created_at',
+];
+
+function csvField(value) {
+    if (value == null) return '';
+    const s = value instanceof Date ? value.toISOString() : String(value);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// CSV export mirroring GET /entries (same current-state join + base filters), with
+// additional range/exact filters and an optional column subset for the frontend's
+// audit-log export button. No auth -- read-only, same as GET /entries.
+router.get('/entries/export', async (req, res) => {
+    const {
+        pipette_id, balance_id, username, verification_type, from, to,
+        pass_low, pass_mid, pass_high,
+        volume_low_min, volume_low_max, volume_mid_min, volume_mid_max, volume_high_min, volume_high_max,
+        mass_low_min, mass_low_max, mass_mid_min, mass_mid_max, mass_high_min, mass_high_max,
+        created_from, created_to, columns,
+    } = req.query;
+
+    const requestedColumns = columns
+        ? columns.split(',').map((c) => c.trim()).filter((c) => EXPORT_COLUMNS.includes(c))
+        : [];
+    const outputColumns = requestedColumns.length ? requestedColumns : EXPORT_COLUMNS;
+
+    const pool = await getPool();
+    const result = await pool.request()
+        .input('pipetteId', sql.Int, pipette_id ? Number(pipette_id) : null)
+        .input('balanceId', sql.Int, balance_id ? Number(balance_id) : null)
+        .input('username', sql.NVarChar, username ?? null)
+        .input('verificationType', sql.NVarChar, verification_type ?? null)
+        .input('from', sql.DateTime2, from ?? null)
+        .input('to', sql.DateTime2, to ?? null)
+        .input('passLow', sql.Char(1), pass_low ?? null)
+        .input('passMid', sql.Char(1), pass_mid ?? null)
+        .input('passHigh', sql.Char(1), pass_high ?? null)
+        .input('volumeLowMin', sql.Decimal(10, 3), volume_low_min ?? null)
+        .input('volumeLowMax', sql.Decimal(10, 3), volume_low_max ?? null)
+        .input('volumeMidMin', sql.Decimal(10, 3), volume_mid_min ?? null)
+        .input('volumeMidMax', sql.Decimal(10, 3), volume_mid_max ?? null)
+        .input('volumeHighMin', sql.Decimal(10, 3), volume_high_min ?? null)
+        .input('volumeHighMax', sql.Decimal(10, 3), volume_high_max ?? null)
+        .input('massLowMin', sql.Decimal(10, 3), mass_low_min ?? null)
+        .input('massLowMax', sql.Decimal(10, 3), mass_low_max ?? null)
+        .input('massMidMin', sql.Decimal(10, 3), mass_mid_min ?? null)
+        .input('massMidMax', sql.Decimal(10, 3), mass_mid_max ?? null)
+        .input('massHighMin', sql.Decimal(10, 3), mass_high_min ?? null)
+        .input('massHighMax', sql.Decimal(10, 3), mass_high_max ?? null)
+        .input('createdFrom', sql.DateTime2, created_from ?? null)
+        .input('createdTo', sql.DateTime2, created_to ?? null)
+        .query(`
+            SELECT
+                e.*,
+                p.equipment_id AS pipette_equipment_id,
+                b.equipment_id AS balance_equipment_id,
+                u.username AS signed_by_username,
+                CASE WHEN e.corrects_entry_id IS NOT NULL THEN 1 ELSE 0 END AS corrected
+            FROM entries e
+            JOIN equipment p ON p.id = e.pipette_id
+            JOIN equipment b ON b.id = e.balance_id
+            LEFT JOIN users u ON u.id = e.signed_by_user_id
+            WHERE NOT EXISTS (SELECT 1 FROM entries c WHERE c.corrects_entry_id = e.id)
+                AND (@pipetteId IS NULL OR e.pipette_id = @pipetteId)
+                AND (@balanceId IS NULL OR e.balance_id = @balanceId)
+                AND (@username IS NULL OR u.username = @username)
+                AND (@verificationType IS NULL OR e.verification_type = @verificationType)
+                AND (@from IS NULL OR e.signed_at >= @from)
+                AND (@to IS NULL OR e.signed_at <= @to)
+                AND (@passLow IS NULL OR e.pass_low = @passLow)
+                AND (@passMid IS NULL OR e.pass_mid = @passMid)
+                AND (@passHigh IS NULL OR e.pass_high = @passHigh)
+                AND (@volumeLowMin IS NULL OR e.volume_low_ul >= @volumeLowMin)
+                AND (@volumeLowMax IS NULL OR e.volume_low_ul <= @volumeLowMax)
+                AND (@volumeMidMin IS NULL OR e.volume_mid_ul >= @volumeMidMin)
+                AND (@volumeMidMax IS NULL OR e.volume_mid_ul <= @volumeMidMax)
+                AND (@volumeHighMin IS NULL OR e.volume_high_ul >= @volumeHighMin)
+                AND (@volumeHighMax IS NULL OR e.volume_high_ul <= @volumeHighMax)
+                AND (@massLowMin IS NULL OR e.mass_low_mg >= @massLowMin)
+                AND (@massLowMax IS NULL OR e.mass_low_mg <= @massLowMax)
+                AND (@massMidMin IS NULL OR e.mass_mid_mg >= @massMidMin)
+                AND (@massMidMax IS NULL OR e.mass_mid_mg <= @massMidMax)
+                AND (@massHighMin IS NULL OR e.mass_high_mg >= @massHighMin)
+                AND (@massHighMax IS NULL OR e.mass_high_mg <= @massHighMax)
+                AND (@createdFrom IS NULL OR e.created_at >= @createdFrom)
+                AND (@createdTo IS NULL OR e.created_at <= @createdTo)
+            ORDER BY e.signed_at DESC
+        `);
+
+    const lines = [outputColumns.join(',')];
+    for (const row of result.recordset) {
+        lines.push(outputColumns.map((c) => csvField(row[c])).join(','));
+    }
+
+    res.status(200)
+        .set('Content-Type', 'text/csv')
+        .set('Content-Disposition', 'attachment; filename="audit-log-export.csv"')
+        .send(lines.join('\r\n'));
+});
+
 // Latest current-state entry for one piece of equipment (pipette or balance side),
 // used by SignOffForm's last-verification panel (Sprint 4, master plan 2026-08-03).
 router.get('/entries/latest/:equipmentId', async (req, res) => {

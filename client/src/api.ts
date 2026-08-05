@@ -1,4 +1,4 @@
-import type { AdminCredentials, AuditEntry, AuditListFilters, Balance, BalancePayload, CorrectionPayload, EntryPayload, EquipmentPatchPayload, FullUser, Pipette, PipettePayload, Tip, TipPatchPayload, TipPayload, User } from './types';
+import type { AdminCredentials, AuditEntry, AuditExportFilters, AuditListFilters, Balance, BalancePayload, CorrectionPayload, EntryPayload, EquipmentPatchPayload, FullUser, Pipette, PipettePayload, Tip, TipPatchPayload, TipPayload, User } from './types';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
@@ -70,3 +70,29 @@ export const fetchLatestEntry = (equipmentId: number) => apiFetch<AuditEntry | n
 
 export const correctEntry = (id: number, payload: CorrectionPayload) =>
     apiFetch<AuditEntry>(`/entries/${id}/correct`, { method: 'POST', body: JSON.stringify(payload) });
+
+// GET /api/entries/export returns a raw CSV file, not JSON -- can't reuse
+// apiFetch (it always calls res.json()), so this fetches the blob directly
+// and triggers a browser download via an anchor tag.
+export async function downloadEntriesExport(filters: AuditExportFilters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+    });
+    const query = params.toString();
+    const res = await fetch(`${API_URL}/api/entries/export${query ? `?${query}` : ''}`);
+    if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? body.error ?? `Export failed: ${res.status}`);
+    }
+    const blob = await res.blob();
+    const filenameMatch = res.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameMatch?.[1] ?? 'entries-export.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}

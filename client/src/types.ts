@@ -223,3 +223,26 @@ export interface AuditListFilters {
     from?: string;
     to?: string;
 }
+
+// GET /api/entries/export -- same filters as the list endpoint plus
+// pass/range filters and a column picker, returns a CSV file (not JSON).
+export interface AuditExportFilters extends AuditListFilters {
+    pass_low?: 'Y' | 'N';
+    pass_mid?: 'Y' | 'N';
+    pass_high?: 'Y' | 'N';
+    volume_low_min?: number;
+    volume_low_max?: number;
+    volume_mid_min?: number;
+    volume_mid_max?: number;
+    volume_high_min?: number;
+    volume_high_max?: number;
+    mass_low_min?: number;
+    mass_low_max?: number;
+    mass_mid_min?: number;
+    mass_mid_max?: number;
+    mass_high_min?: number;
+    mass_high_max?: number;
+    created_from?: string;
+    created_to?: string;
+    columns?: string; // comma-separated column keys, omit for all
+}
