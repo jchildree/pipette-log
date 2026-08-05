@@ -192,8 +192,9 @@ export default function SignOffForm() {
         }));
     }
 
-    // Stakeholder ask: don't force endless retry on an out-of-tolerance reading --
-    // let the tech pull a prior failed attempt back in as the final, accepted value.
+    // Don't force endless retry, but require at least one reattempt (2 failed
+    // attempts) before a tech can accept an out-of-tolerance reading as final --
+    // gated in the render below (accept button only shows once attempts.length > 1).
     // The entry's note becomes required to explain why (enforced via noteRequired above).
     function acceptAttempt(channel: number, key: PointKey, attemptIndex: number) {
         setChannelRows((prev) => {
@@ -243,7 +244,7 @@ export default function SignOffForm() {
                         const passFail = tolerance3pct(Number(point.current.volumeUl), Number(point.current.massMg));
                         if (passFail === 'N') {
                             failedLabels.push(isMultichannel ? `Ch${ch} ${label}` : label);
-                            row[key] = { ...point, attempts: [...point.attempts, point.current], current: { ...EMPTY_ROW } };
+                            row[key] = { ...point, attempts: [...point.attempts, point.current], expanded: true };
                         }
                     }
                     next[ch] = row;
@@ -309,6 +310,7 @@ export default function SignOffForm() {
                 }
                 resetForm();
             } catch (err) {
+                setSignOffVisible(false);
                 toast.error(err instanceof Error ? err.message : 'Submission failed.');
             }
         } else {
@@ -343,7 +345,7 @@ export default function SignOffForm() {
                     {selectedPipette && (
                         <div className="cardMeta">
                             <div className="cardMetaLine">Pipette Range: {selectedPipette.pipette_range ?? 'n/a'}</div>
-                            <div className="cardMetaLine">Calibration Due Date: {selectedPipette.calibration_due_date ?? 'n/a'}</div>
+                            <div className="cardMetaLine">Calibration Due Date: {selectedPipette.calibration_due_date?.split('T')[0] ?? 'n/a'}</div>
                             {selectedPipette.low_usage_ul != null && (
                                 <div className="cardMetaLine">Low Usage: {toDisplay(String(selectedPipette.low_usage_ul), selectedPipette.unit ?? 'uL')} {selectedPipette.unit ?? 'uL'}</div>
                             )}
@@ -383,7 +385,7 @@ export default function SignOffForm() {
                     </select>
                     {selectedBalance && (
                         <div className="cardMeta">
-                            <div className="cardMetaLine">Calibration Due Date: {selectedBalance.calibration_due_date ?? 'n/a'}</div>
+                            <div className="cardMetaLine">Calibration Due Date: {selectedBalance.calibration_due_date?.split('T')[0] ?? 'n/a'}</div>
                         </div>
                     )}
                 </div>
@@ -441,9 +443,11 @@ export default function SignOffForm() {
                                                     <span className="attemptCell">{toDisplay(a.volumeUl, activeUnit)} {activeUnit}</span>
                                                     <span className="attemptCell">{toDisplay(a.massMg, activeUnit)} {massUnitLabel}</span>
                                                     <span className="attemptCell attemptFail">N</span>
-                                                    <button type="button" className="acceptAttempt" onClick={() => acceptAttempt(ch, key, i)}>
-                                                        Accept this result
-                                                    </button>
+                                                    {point.attempts.length > 1 && (
+                                                        <button type="button" className="acceptAttempt" onClick={() => acceptAttempt(ch, key, i)}>
+                                                            Accept this result
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

@@ -83,7 +83,7 @@ async function flagOutOfServiceIfThirdFailure(pool, equipmentId, roleColumn) {
     if (!(await isThirdConsecutiveFailure(pool, equipmentId, roleColumn))) return false;
     await pool.request()
         .input('id', sql.Int, equipmentId)
-        .query(`UPDATE equipment SET status = 'Out of Service' WHERE id = @id AND status <> 'Out of Service'`);
+        .query(`UPDATE equipment SET status = 'Out of Service' WHERE id = @id AND (status IS NULL OR status <> 'Out of Service')`);
     return true;
 }
 
