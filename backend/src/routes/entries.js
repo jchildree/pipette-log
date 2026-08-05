@@ -65,7 +65,8 @@ async function blockedBySignerGate(pool, { pipette_id, balance_id, verification_
 // Auto out-of-service flip (Sprint 3, master plan 2026-08-03). The signer gate above
 // blocks a same-signer 3rd consecutive failure; this runs after a 3rd consecutive
 // failure actually lands (a different signer let it through) and flips the equipment
-// to Out of Service. Checked independently per pipette/balance side, same as the gate.
+// to Out of Service. Pipette side only -- a balance failing calibration doesn't take
+// itself out of service the way a pipette does.
 async function isThirdConsecutiveFailure(pool, equipmentId, roleColumn) {
     const result = await pool.request()
         .input('equipmentId', sql.Int, equipmentId)
@@ -87,10 +88,9 @@ async function flagOutOfServiceIfThirdFailure(pool, equipmentId, roleColumn) {
     return true;
 }
 
-async function applyOutOfServiceFlips(pool, { pipette_id, balance_id }) {
+async function applyOutOfServiceFlips(pool, { pipette_id }) {
     const flipped = [];
     if (await flagOutOfServiceIfThirdFailure(pool, pipette_id, 'pipette_id')) flipped.push('pipette');
-    if (await flagOutOfServiceIfThirdFailure(pool, balance_id, 'balance_id')) flipped.push('balance');
     return flipped;
 }
 

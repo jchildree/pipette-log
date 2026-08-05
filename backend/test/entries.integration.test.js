@@ -299,9 +299,13 @@ test('3rd consecutive failure (different signer) auto-flips equipment to Out of 
 
     const third = await submit(userB, '666666', failingPoints());
     assert.equal(third.status, 201, '3rd consecutive fail by a different signer is allowed through');
-    assert.deepEqual(third.body.out_of_service, ['pipette', 'balance'], 'both sides share the same 3-fail streak here');
+    assert.deepEqual(third.body.out_of_service, ['pipette'], 'balance never auto-flips, only the pipette side');
 
     const equipment = await api('/pipettes');
     const flipped = equipment.body.find((p) => p.id === pipetteId);
     assert.equal(flipped.status, 'Out of Service');
+
+    const balances = await api('/balances');
+    const unflippedBalance = balances.body.find((b) => b.id === balanceId);
+    assert.notEqual(unflippedBalance.status, 'Out of Service');
 });

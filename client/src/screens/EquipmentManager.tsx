@@ -410,7 +410,7 @@ export default function EquipmentManager() {
                                         <td>{p.equipment_id}</td>
                                         <td>{p.category ?? 'n/a'}</td>
                                         <td>{p.pipette_range ?? 'n/a'}</td>
-                                        <td>{p.calibration_due_date ?? 'n/a'}</td>
+                                        <td>{p.calibration_due_date?.split('T')[0] ?? 'n/a'}</td>
                                         <td>{p.status ?? 'n/a'}</td>
                                     </tr>
                                     {expandedPipetteId === p.id && (
@@ -466,7 +466,7 @@ export default function EquipmentManager() {
                                 <Fragment key={b.id}>
                                     <tr className="eqRow" onClick={() => setExpandedBalanceId(expandedBalanceId === b.id ? null : b.id)}>
                                         <td>{b.equipment_id}</td>
-                                        <td>{b.calibration_due_date ?? 'n/a'}</td>
+                                        <td>{b.calibration_due_date?.split('T')[0] ?? 'n/a'}</td>
                                     </tr>
                                     {expandedBalanceId === b.id && (
                                         <tr className="eqDetailRow">

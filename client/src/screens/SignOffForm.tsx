@@ -233,25 +233,38 @@ export default function SignOffForm() {
         }
 
         if (verificationType === 'tolerance_3pct') {
+            // Computed synchronously against current `channelRows` -- setChannelRows below is
+            // fire-and-forget bookkeeping (attempts/expanded) only, never the source the gate
+            // decides from. Reading a value out of its own async updater here previously let
+            // every out-of-tolerance submit through: the updater hadn't run yet when this was
+            // checked, so failedLabels was always still empty (investigate: Case - Failed
+            // Verification Bypasses Hard-Fail Gate).
             const failedLabels: string[] = [];
-            setChannelRows((prev) => {
-                const next = { ...prev };
-                for (const ch of activeChannels) {
-                    const row = { ...prev[ch] };
-                    for (const { key, label } of POINTS) {
-                        const point = row[key];
-                        if (point.accepted) continue; // already accepted despite failing -- leave as-is
-                        const passFail = tolerance3pct(Number(point.current.volumeUl), Number(point.current.massMg));
-                        if (passFail === 'N') {
-                            failedLabels.push(isMultichannel ? `Ch${ch} ${label}` : label);
-                            row[key] = { ...point, attempts: [...point.attempts, point.current], expanded: true };
-                        }
-                    }
-                    next[ch] = row;
+            for (const ch of activeChannels) {
+                for (const { key, label } of POINTS) {
+                    const point = channelRows[ch][key];
+                    if (point.accepted) continue; // already accepted despite failing -- leave as-is
+                    const passFail = tolerance3pct(Number(point.current.volumeUl), Number(point.current.massMg));
+                    if (passFail === 'N') failedLabels.push(isMultichannel ? `Ch${ch} ${label}` : label);
                 }
-                return next;
-            });
+            }
+
             if (failedLabels.length > 0) {
+                setChannelRows((prev) => {
+                    const next = { ...prev };
+                    for (const ch of activeChannels) {
+                        const row = { ...prev[ch] };
+                        for (const { key } of POINTS) {
+                            const point = row[key];
+                            if (point.accepted) continue;
+                            if (tolerance3pct(Number(point.current.volumeUl), Number(point.current.massMg)) === 'N') {
+                                row[key] = { ...point, attempts: [...point.attempts, point.current], expanded: true };
+                            }
+                        }
+                        next[ch] = row;
+                    }
+                    return next;
+                });
                 setSignOffVisible(false);
                 toast.error(`${failedLabels.join(', ')} out of tolerance -- re-enter and try again, or accept a prior attempt below.`);
                 return;
@@ -307,6 +320,7 @@ export default function SignOffForm() {
                 toast.success('Entry signed and submitted.');
                 if (result.out_of_service.length > 0) {
                     toast.error(`${result.out_of_service.join(' and ')} flagged Out of Service after 3 consecutive failures.`);
+                    loadReferenceData();
                 }
                 resetForm();
             } catch (err) {
