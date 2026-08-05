@@ -254,3 +254,54 @@ test('consecutive-failure signer gate: same signer ok for 2 straight fails, bloc
     const afterResetSecond = await submit(userA, '333333', failingPoints());
     assert.equal(afterResetSecond.status, 201, 'streak reset by the pass -- same signer ok for fail #2 again');
 });
+
+test('3rd consecutive failure (different signer) auto-flips equipment to Out of Service', async () => {
+    const userA = `itest_oosA_${Date.now()}`;
+    const userB = `itest_oosB_${Date.now()}`;
+    await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: userA, pin: '555555' }) });
+    await api('/users/setup', { method: 'POST', body: JSON.stringify({ username: userB, pin: '666666' }) });
+
+    const pool = await getPool();
+    await pool.request().input('username', sql.NVarChar, userA).query('UPDATE users SET is_admin = 1 WHERE username = @username');
+
+    const balance = await api('/balances', {
+        method: 'POST',
+        body: JSON.stringify({ username: userA, pin: '555555', equipment_id: `BAL-OOS-${Date.now()}` }),
+    });
+    const pipette = await api('/pipettes', {
+        method: 'POST',
+        body: JSON.stringify({
+            username: userA, pin: '555555', equipment_id: `PI-OOS-${Date.now()}`,
+            category: 'single channel', low_ul: 20, mid_ul: 100, high_ul: 200,
+        }),
+    });
+    const pipetteId = pipette.body.id;
+    const balanceId = balance.body.id;
+
+    function failingPoints() {
+        return points({ low: { mass_mg: 1 } });
+    }
+
+    async function submit(username, pin, pts) {
+        return api('/entries', {
+            method: 'POST',
+            body: JSON.stringify({ username, pin, pipette_id: pipetteId, balance_id: balanceId, verification_type: 'tolerance_3pct', points: pts }),
+        });
+    }
+
+    const first = await submit(userA, '555555', failingPoints());
+    assert.equal(first.status, 201);
+    assert.deepEqual(first.body.out_of_service, []);
+
+    const second = await submit(userA, '555555', failingPoints());
+    assert.equal(second.status, 201);
+    assert.deepEqual(second.body.out_of_service, []);
+
+    const third = await submit(userB, '666666', failingPoints());
+    assert.equal(third.status, 201, '3rd consecutive fail by a different signer is allowed through');
+    assert.deepEqual(third.body.out_of_service, ['pipette', 'balance'], 'both sides share the same 3-fail streak here');
+
+    const equipment = await api('/pipettes');
+    const flipped = equipment.body.find((p) => p.id === pipetteId);
+    assert.equal(flipped.status, 'Out of Service');
+});

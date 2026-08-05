@@ -273,9 +273,12 @@ export default function SignOffForm() {
 
         if (isOnline()) {
             try {
-                await submitEntry(payload);
+                const result = await submitEntry(payload);
                 setSignOffVisible(false);
                 toast.success('Entry signed and submitted.');
+                if (result.out_of_service.length > 0) {
+                    toast.error(`${result.out_of_service.join(' and ')} flagged Out of Service after 3 consecutive failures.`);
+                }
                 resetForm();
             } catch (err) {
                 toast.error(err instanceof Error ? err.message : 'Submission failed.');

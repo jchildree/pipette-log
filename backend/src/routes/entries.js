@@ -62,6 +62,38 @@ async function blockedBySignerGate(pool, { pipette_id, balance_id, verification_
     return null;
 }
 
+// Auto out-of-service flip (Sprint 3, master plan 2026-08-03). The signer gate above
+// blocks a same-signer 3rd consecutive failure; this runs after a 3rd consecutive
+// failure actually lands (a different signer let it through) and flips the equipment
+// to Out of Service. Checked independently per pipette/balance side, same as the gate.
+async function isThirdConsecutiveFailure(pool, equipmentId, roleColumn) {
+    const result = await pool.request()
+        .input('equipmentId', sql.Int, equipmentId)
+        .query(`
+            SELECT TOP 3 pass_low, pass_mid, pass_high
+            FROM entries e
+            WHERE e.${roleColumn} = @equipmentId
+                AND NOT EXISTS (SELECT 1 FROM entries c WHERE c.corrects_entry_id = e.id)
+            ORDER BY e.created_at DESC
+        `);
+    return result.recordset.length === 3 && result.recordset.every(isFailingRow);
+}
+
+async function flagOutOfServiceIfThirdFailure(pool, equipmentId, roleColumn) {
+    if (!(await isThirdConsecutiveFailure(pool, equipmentId, roleColumn))) return false;
+    await pool.request()
+        .input('id', sql.Int, equipmentId)
+        .query(`UPDATE equipment SET status = 'Out of Service' WHERE id = @id AND status <> 'Out of Service'`);
+    return true;
+}
+
+async function applyOutOfServiceFlips(pool, { pipette_id, balance_id }) {
+    const flipped = [];
+    if (await flagOutOfServiceIfThirdFailure(pool, pipette_id, 'pipette_id')) flipped.push('pipette');
+    if (await flagOutOfServiceIfThirdFailure(pool, balance_id, 'balance_id')) flipped.push('balance');
+    return flipped;
+}
+
 function validatePoints(points) {
     return points && POINTS.every((p) => points[p] && points[p].volume_ul != null && points[p].mass_mg != null);
 }
@@ -234,8 +266,9 @@ router.post('/entries', async (req, res) => {
     }
 
     const result = await insertEntry(pool, { pipette_id, balance_id, verification_type, points, channels, note, signedByUserId: auth.userId });
+    const outOfService = await applyOutOfServiceFlips(pool, { pipette_id, balance_id });
 
-    res.status(201).json(result.recordset[0]);
+    res.status(201).json({ ...result.recordset[0], out_of_service: outOfService });
 });
 
 // Audit/review list: current-state entries only (the latest row in each correction
@@ -312,8 +345,9 @@ router.post('/entries/:id/correct', async (req, res) => {
         pipette_id, balance_id, verification_type, points, channels, note,
         signedByUserId: auth.userId, correctsEntryId: id,
     });
+    const outOfService = await applyOutOfServiceFlips(pool, { pipette_id, balance_id });
 
-    res.status(201).json(result.recordset[0]);
+    res.status(201).json({ ...result.recordset[0], out_of_service: outOfService });
 });
 
 router.get('/entries/:id/history', async (req, res) => {

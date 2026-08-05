@@ -9,7 +9,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     });
     if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `Request failed: ${res.status}`);
+        throw new Error(body.message ?? body.error ?? `Request failed: ${res.status}`);
     }
     if (res.status === 204) return undefined as T;
     return res.json();
@@ -41,7 +41,7 @@ export const deleteEquipment = (id: number, creds: AdminCredentials) =>
     apiFetch<void>(`/equipment/${id}`, { method: 'DELETE', body: JSON.stringify(creds) });
 
 export const submitEntry = (payload: EntryPayload) =>
-    apiFetch<{ id: number; signed_at: string }>('/entries', {
+    apiFetch<{ id: number; signed_at: string; out_of_service: ('pipette' | 'balance')[] }>('/entries', {
         method: 'POST',
         body: JSON.stringify(payload),
     });
