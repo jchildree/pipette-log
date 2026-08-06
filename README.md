@@ -1,6 +1,6 @@
 # Pipette Log
 
-Pipette/balance calibration sign-off app. `backend/` is an Express + MSSQL REST API, `client/` is a React + Vite web app. See `CLAUDE.md` for repo layout and `docs/Obsidian Vault/Pipette Log/INDEX.md` for design decisions (ADRs).
+Pipette/balance calibration sign-off app. `backend/` is an Express + MSSQL REST API, `client/` is a React + Vite web app. See `CLAUDE.md` for repo layout and `docs/Obsidian Vault/Pipette Log/INDEX.[...]
 
 For a plain-language walkthrough of daily use, see [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
@@ -8,17 +8,17 @@ For a plain-language walkthrough of daily use, see [`docs/USER_GUIDE.md`](docs/U
 
 | Layer | Technology | Notes |
 |---|---|---|
-| Client | React 19 + TypeScript, Vite 8 | Plain SPA, no framework (Next/Remix) or router library -- tab state lives in `App.tsx`. `oxlint` for linting. See ADR-012 for why this replaced an earlier Expo/React Native attempt. |
+| Client | React 19 + TypeScript, Vite 8 | Plain SPA, no framework (Next/Remix) or router library -- tab state lives in `App.tsx`. `oxlint` for linting. See ADR-012 for why this replaced an earlie[...]|
 | Backend | Node.js (v18+), Express 4 | CommonJS (`type: "commonjs"` in `backend/package.json`), not ESM. |
-| Database | Microsoft SQL Server 2022 | Runs via the `mssql` npm driver (`backend/src/lib/db.js`). Schema is plain `.sql` files in `backend/sqlSchemas/`, applied in numeric filename order by `docker/db-init.sh` -- there is no migration framework (Knex/Prisma/etc), so schema changes are a new numbered `.sql` file. |
-| Auth | `bcrypt` password hashing, custom PIN-lockout logic | `backend/src/lib/auth.js`. Session is a technician username + 6-digit PIN checked per-action (sign-off, correction, admin actions), not a persistent login token -- there's a separate lightweight admin session in the client (`client/src/admin/AdminSession.tsx`) that just remembers the last-used admin credentials for convenience. |
-| Infra (local/on-prem) | Docker Compose | `docker-compose.yml` runs two services: `mssql` (the DB, stays up) and `mssql-init` (one-shot schema bootstrap, exits after running). No Kubernetes/cloud dependency -- this is designed to run on a single on-prem box or a dev machine. |
+| Database | Microsoft SQL Server 2022 | Runs via the `mssql` npm driver (`backend/src/lib/db.js`). Schema is plain `.sql` files in `backend/sqlSchemas/`, applied in numeric filename order by `doc[...]`
+| Auth | `bcrypt` password hashing, custom PIN-lockout logic | `backend/src/lib/auth.js`. Session is a technician username + 6-digit PIN checked per-action (sign-off, correction, admin actions), n[...]
+| Infra (local/on-prem) | Docker Compose | `docker-compose.yml` runs two services: `mssql` (the DB, stays up) and `mssql-init` (one-shot schema bootstrap, exits after running). No Kubernetes/cloud[...]
 | Tests | Node's built-in `node:test` runner | No Jest/Mocha/Vitest. `backend/test/*.test.js`; unit tests need no DB, integration tests need the Docker DB running with reference data seeded. |
 
 **Where things live, for making changes:**
 - REST routes: `backend/src/routes/*.js` (`entries.js` = sign-offs/corrections, `reference.js` = pipettes/balances/tips CRUD, `users.js` = accounts/admin).
 - Business rules (tolerance math, pass/fail): `backend/src/lib/tolerance.js`.
-- DB schema: `backend/sqlSchemas/NNN_description.sql`, new files only, never edit an applied one in place -- add a new numbered file for any change and re-run `docker compose up -d` against a fresh volume, or hand-apply the delta to an existing DB.
+- DB schema: `backend/sqlSchemas/NNN_description.sql`, new files only, never edit an applied one in place -- add a new numbered file for any change and re-run `docker compose up -d` against a fres[...]
 - Client screens: `client/src/screens/*.tsx`, one file per tab (`SignOffForm`, `AuditLog`, `EquipmentManager`, `UsersManager`).
 - API calls from the client: `client/src/api.ts`.
 
@@ -30,7 +30,7 @@ If you got this as a zip from a GitHub Release, `client/dist/` is already built 
 
 **Requires:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) and [Node.js](https://nodejs.org/) (v18+) installed.
 
-**If you're extracting the zip into a OneDrive-synced folder** (Desktop and Documents are OneDrive-synced by default on managed Windows machines), OneDrive's "Files On-Demand" can leave files as unhydrated cloud placeholders -- they show up in Explorer and pass an `ls`/`dir` check, but read as empty or partial until OneDrive finishes downloading them, so `serve` can return a blank or broken page even though `index.html` "exists". Before serving:
+**If you're extracting the zip into a OneDrive-synced folder** (Desktop and Documents are OneDrive-synced by default on managed Windows machines), OneDrive's "Files On-Demand" can leave files as u[...]
 1. Right-click the extracted folder (or at least `client/dist/`) in Explorer -> **Always keep on this device**.
 2. Wait for the OneDrive sync icon on that folder to clear (green check, not a cloud icon).
 
@@ -51,7 +51,7 @@ npm start
 npx serve -l 8081 client/dist
 ```
 
-Open `http://localhost:8081`. `VITE_API_URL` is baked into this build as `http://localhost:3000` -- if your backend runs somewhere else, rebuild from source with a different `client/.env` instead (see [Client](#3-client) below).
+Open `http://localhost:8081`. `VITE_API_URL` is baked into this build as `http://localhost:3000` -- if your backend runs somewhere else, rebuild from source with a different `client/.env` instead [...]
 
 ## Building from source
 
@@ -90,49 +90,55 @@ node scripts/seed-equipment.js scripts/equipment.json    # pipettes + balances
 node scripts/seed-tips.js scripts/tips.json               # repeater tip low/mid/high targets
 ```
 
-`scripts/xlsx-to-equipment-json.js` and `scripts/xlsx-to-tips-json.js` regenerate those two JSON files from the source workbook (`T:\IL\QA Projects\Pipette docs\Simple table.xlsx`) if the real inventory changes.
+`scripts/xlsx-to-equipment-json.js` and `scripts/xlsx-to-tips-json.js` regenerate those two JSON files from the source workbook (`T:\IL\QA Projects\Pipette docs\Simple table.xlsx`) if the real inv[...]
 
 ### 3. Client
 
 ```bash
 cd client
 cp .env.example .env
-```
 
-Set `VITE_API_URL` in `client/.env` to the backend's URL for your deploy target (e.g. `http://localhost:3000` for local dev, or the reachable host/port for a hosted test instance). `VITE_API_URL` is baked in at build time, so it must be set before `npm run build` -- changing it later requires a rebuild.
-
-```bash
+# Install dev and runtime dependencies (important: TypeScript, Vite and the Vite plugin live in devDependencies)
 npm install
-npm run dev     # local dev server
-# or
-npm run build   # production build, output in client/dist
+
+# Local development server
+npm run dev     # vite dev server
+
+# Production build (outputs to client/dist)
+npm run build   # runs the local `tsc -b` and `vite build` from node_modules/.bin
 ```
 
-To serve a production build, run `serve` from the **repo root** (not from `client/`) so the `client/dist` path resolves:
+Notes and troubleshooting
+
+- If you see an error like "'tsc' is not recognized" when running `npm run build`, it means the TypeScript compiler isn't available on your PATH. Make sure you ran `npm install` inside `client/` so the project's devDependencies (typescript, vite, @vitejs/plugin-react) are installed and the local binaries are available. Alternatively, you can run the build using npx:
+
+  npx tsc -b && npx vite build
+
+- The production build output folder is `client/dist`. To serve it with `serve`, run the command from the repo root so the path resolves correctly:
 
 ```bash
-cd ..    # back to repo root, if you're still in client/
+# from the repo root (not inside client/)
 npx serve -l 8081 client/dist
 ```
 
-Running `npx serve -l 8081 client/dist` from inside `client/` looks for `client/client/dist`, which doesn't exist -- every request 404s instantly (`serve`'s console log looks like `HTTP <timestamp> ::1 Returned 404 in 2 ms`). If you hit that, check your cwd.
+Running `npx serve -l 8081 client/dist` from inside `client/` looks for `client/client/dist`, which doesn't exist -- every request will 404 (`serve`'s console log looks like `HTTP <timestamp> ::1 GET /` then `Returned 404`).
 
-**Blank page even though `serve` is running and returning 200s:** open the browser's devtools console (F12) first -- that's the fastest way to tell a JS error (crash before render) apart from an empty API response (backend not running / wrong `VITE_API_URL` / CORS). If the console is empty too, suspect the OneDrive placeholder-file issue above -- an unhydrated `index-*.js` can load as 0 bytes and fail silently.
+**Blank page even though `serve` is running and returning 200s:** open the browser's devtools console (F12) first -- that's the fastest way to tell a JS error (crash before render) apart from an asset/build mismatch.
 
 ## Using the app
 
 Four tabs across the top:
 
-- **New Verification** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), then **Sign & Submit**. Pass/fail is always auto-computed at ±3% tolerance; **After External Calibration** is note-only -- it doesn't change how pass/fail is calculated, it just flags the entry and requires a note. A reading that fails tolerance is archived as a retry attempt and the field clears for re-entry -- or click **Accept this result** on a prior attempt to submit it as final anyway (note required). Signing asks for a technician username + PIN, created via Users below.
-- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history, or **Correct This Entry** to amend the current values (technician username + PIN + note required -- corrections are additive, the original stays in the history).
-- **Equipment** -- browse pipettes/balances as paginated tables (click a row to expand full detail). Adding, editing, or deleting equipment is admin-only: log in via **Admin Login** (top right) to unlock **+ Add Equipment** and per-row **Edit** (which also offers **Delete Equipment**).
-- **Users** -- create a new technician username + PIN, no approval needed. Logged-in admins additionally see a checkbox to create a new user as an admin, and a table of every user (promote/demote, deactivate/reactivate, unlock a PIN-locked account).
+- **New Verification** -- the main workflow. Pick a Pipette (or a Tip, for repeater pipettes) and a Balance, enter Volume/Mass for Low/Mid/High (and every channel, for multichannel pipettes), the[...]
+- **Audit Log** -- browse every signed entry, filterable by pipette/balance. Click an entry to see its full correction history, or **Correct This Entry** to amend the current values (technician u[...]
+- **Equipment** -- browse pipettes/balances as paginated tables (click a row to expand full detail). Adding, editing, or deleting equipment is admin-only: log in via **Admin Login** (top right) t[...]
+- **Users** -- create a new technician username + PIN, no approval needed. Logged-in admins additionally see a checkbox to create a new user as an admin, and a table of every user (promote/demote[...]
 
 ### First login
 
-Bootstrap the first admin outside the app: `node backend/scripts/seed-admin.js <username> <pin>`. Everyone else self-signs-up from the **Users** tab -- that account can sign on to **New Verification**. Adding equipment or managing other users needs an admin: click **Admin Login** (top right of every page) with an admin account's credentials.
+Bootstrap the first admin outside the app: `node backend/scripts/seed-admin.js <username> <pin>`. Everyone else self-signs-up from the **Users** tab -- that account can sign on to **New Verificat[...]
 
 ## Tests
 
 - `cd backend && npm test` -- unit tests, no DB required.
-- `cd backend && npm run test:integration` -- full route lifecycle against the Docker DB above. Requires reference data seeded: at least one row each in `balances` and `pipettes` (see `backend/scripts/seed-equipment.js`).
+- `cd backend && npm run test:integration` -- full route lifecycle against the Docker DB above. Requires reference data seeded: at least one row each in `balances` and `pipettes` (see `backend/sc[...]
